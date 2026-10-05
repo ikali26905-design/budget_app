@@ -36,9 +36,9 @@ function enTeteJauge(titre, etat) {
 // Ligne sous une jauge : pourcentage + niveau (symbole et texte) + reste ou dépassement
 function piedJauge(etat) {
   const niveau = infosNiveau(etat.niveau);
-  const reste = etat.reste >= 0
-    ? `Reste ${formaterMontantCourt(etat.reste)}`
-    : `Dépassé de ${formaterMontantCourt(-etat.reste)}`;
+  let reste = `Reste ${formaterMontantCourt(etat.reste)}`;
+  if (etat.reste === 0) reste = 'Plafond atteint';
+  if (etat.reste < 0) reste = `Dépassé de ${formaterMontantCourt(-etat.reste)}`;
   return creer('div', { class: `jauge__pied jauge__pied--${etat.niveau}` },
     creer('span', {},
       creer('span', { class: 'jauge__symbole', 'aria-hidden': 'true' }, niveau.symbole),
@@ -220,5 +220,65 @@ export function rendreHistorique(conteneur, { donnees, mois, filtre, actions }) 
     barreFiltres(utilisees, filtreActif, actions),
     filtreActif ? resumeFiltre(visibles, categorie(filtreActif)) : creer('p', { class: 'aide aide--centre' }, 'Touche une transaction pour la modifier ou la supprimer.'),
     grouperParJour(visibles).map((g) => groupeJour(g, categorie, actions)),
+  );
+}
+
+/* ===================== Budgets ===================== */
+
+// Carte du budget global : jauge si défini, sinon invitation à le définir
+function carteBudgetGlobalEditable(donnees, totalDepenses, actions) {
+  if (!donnees.budgetGlobal) {
+    return creer('div', { class: 'carte' },
+      creer('h2', { class: 'carte__titre' }, 'Budget global du mois'),
+      creer('p', { class: 'aide aide--sous-champ' }, 'Fixe un maximum pour l’ensemble de tes dépenses du mois.'),
+      creer('button', { type: 'button', class: 'bouton bouton--secondaire bouton--plein', onclick: () => actions.modifierBudget(null) },
+        'Définir un budget global'));
+  }
+  const etat = calculerEtatBudget(totalDepenses, donnees.budgetGlobal);
+  return creer('button', { type: 'button', class: 'carte carte--bouton', onclick: () => actions.modifierBudget(null), 'aria-label': `Modifier le budget global, ${formaterMontant(etat.depense)} sur ${formaterMontant(etat.plafond)}` },
+    creerBlocJauge('Budget global du mois', etat));
+}
+
+// Ligne d'une catégorie avec plafond : jauge cliquable
+function ligneBudget(categorie, etat, actions) {
+  return creer('li', {},
+    creer('button', { type: 'button', class: 'ligne-budget', onclick: () => actions.modifierBudget(categorie.id) },
+      creerBlocJauge(`${categorie.emoji} ${categorie.nom}`, etat)));
+}
+
+// Ligne d'une catégorie sans plafond : dépensé ce mois-ci + invitation
+function ligneSansPlafond(categorie, depense, actions) {
+  return creer('li', {},
+    creer('button', { type: 'button', class: 'ligne-transaction', onclick: () => actions.modifierBudget(categorie.id) },
+      badgeCategorie(categorie),
+      creer('span', { class: 'ligne-transaction__texte' },
+        creer('span', { class: 'ligne-transaction__nom' }, categorie.nom),
+        creer('span', { class: 'ligne-transaction__note' }, `${formaterMontant(depense)} dépensés`)),
+      creer('span', { class: 'lien-action' }, 'Définir')));
+}
+
+// Écran Budgets : budget global, catégories avec plafond (les plus consommées d'abord), puis sans plafond
+export function rendreBudgets(conteneur, { donnees, mois, actions }) {
+  const duMois = transactionsDuMois(donnees.transactions, mois);
+  const depensesParCategorie = new Map(calculerTotalParCategorie(duMois, 'depense').map((t) => [t.categorieId, t.total]));
+  const totalDepenses = calculerTotaux(duMois).depenses;
+  const categoriesDepense = donnees.categories.filter((c) => c.type === 'depense');
+
+  const avecPlafond = categoriesDepense
+    .filter((c) => donnees.budgets[c.id])
+    .map((c) => ({ categorie: c, etat: calculerEtatBudget(depensesParCategorie.get(c.id) ?? 0, donnees.budgets[c.id]) }))
+    .sort((a, b) => b.etat.pourcentage - a.etat.pourcentage);
+  const sansPlafond = categoriesDepense.filter((c) => !donnees.budgets[c.id]);
+
+  remplir(conteneur,
+    carteBudgetGlobalEditable(donnees, totalDepenses, actions),
+    creer('h2', { class: 'titre-section' }, 'Par catégorie'),
+    avecPlafond.length > 0
+      ? creer('ul', { class: 'liste carte liste--budgets' }, avecPlafond.map(({ categorie, etat }) => ligneBudget(categorie, etat, actions)))
+      : creer('p', { class: 'aide aide--centre' }, 'Aucun plafond pour l’instant. Touche une catégorie ci-dessous pour en définir un.'),
+    sansPlafond.length > 0 && [
+      creer('h2', { class: 'titre-section' }, 'Sans plafond'),
+      creer('ul', { class: 'liste carte' }, sansPlafond.map((c) => ligneSansPlafond(c, depensesParCategorie.get(c.id) ?? 0, actions))),
+    ],
   );
 }

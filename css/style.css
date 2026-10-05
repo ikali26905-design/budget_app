@@ -1002,7 +1002,44 @@ svg {
   font-weight: 700;
 }
 
-/* ---------- 18. Écrans larges (ordinateur) ---------- */
+/* ---------- 18. Budgets ---------- */
+.aide--sous-champ {
+  margin: -8px 0 16px;
+}
+
+.carte .aide--sous-champ {
+  margin: 0 0 12px;
+}
+
+/* Une carte entièrement cliquable (budget global) */
+.carte--bouton {
+  display: block;
+  width: 100%;
+  border: 0;
+  text-align: left;
+  color: inherit;
+}
+
+.carte--bouton:active,
+.ligne-budget:active {
+  background: var(--surface-2);
+}
+
+.ligne-budget {
+  display: block;
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+
+.lien-action {
+  color: var(--lien);
+  font-weight: 600;
+}
+
+/* ---------- 19. Écrans larges (ordinateur) ---------- */
 @media (min-width: 700px) {
   .contenu {
     padding-top: 16px;

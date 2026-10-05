@@ -92,8 +92,11 @@ export function ouvrirFeuille(titre, contenu) {
   remplir(corps, contenu);
   corps.scrollTop = 0;
   if (!feuille.open) feuille.showModal();
-  // showModal() donne le focus au premier élément ayant l'attribut autofocus
-  corps.querySelector('[autofocus]')?.focus();
+  // On place le focus sur le champ marqué autofocus ; s'il est pré-rempli, on sélectionne
+  // son contenu pour que la première frappe remplace la valeur au lieu de s'y ajouter
+  const champ = corps.querySelector('[autofocus]');
+  champ?.focus();
+  if (champ?.value) champ.select();
   return corps;
 }
 

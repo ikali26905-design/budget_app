@@ -8,11 +8,11 @@
 
 import * as store from './store.js';
 import { aujourdhui, moisDe, decalerMois, nomDuMois, libelleJour } from './dates.js';
-import { genererOccurrences } from './calculs.js';
+import { genererOccurrences, transactionsDuMois, calculerTotaux, calculerTotalParCategorie } from './calculs.js';
 import { formaterMontant } from './money.js';
 import { afficherToast, informer, demanderConfirmation, fermerFeuille } from './ui.js';
-import { ouvrirFormulaireTransaction } from './formulaire.js';
-import { rendreAccueil, rendreHistorique } from './ecrans.js';
+import { ouvrirFormulaireTransaction, ouvrirFormulairePlafond } from './formulaire.js';
+import { rendreAccueil, rendreHistorique, rendreBudgets } from './ecrans.js';
 
 // État de l'interface (les données elles-mêmes viennent toujours de store.js)
 const etat = {
@@ -57,6 +57,7 @@ function rendreEnTete() {
 const RENDUS = {
   accueil: rendreAccueil,
   historique: rendreHistorique,
+  budgets: rendreBudgets,
 };
 
 // Affiche l'écran courant et met à jour l'onglet actif
@@ -178,11 +179,38 @@ function ouvrirModification(transaction) {
   });
 }
 
+/* ===================== Budgets ===================== */
+
+// Ouvre la saisie du plafond d'une catégorie, ou du budget global si categorieId vaut null
+function ouvrirBudget(categorieId) {
+  const duMois = transactionsDuMois(etat.donnees.transactions, etat.mois);
+  const global = categorieId === null;
+  const categorie = etat.donnees.categories.find((c) => c.id === categorieId);
+  const depense = global
+    ? calculerTotaux(duMois).depenses
+    : (calculerTotalParCategorie(duMois).find((t) => t.categorieId === categorieId)?.total ?? 0);
+  // Une seule fonction d'enregistrement : null = retirer le plafond
+  const enregistrer = (plafond, message) => executer(async () => {
+    if (global) await store.definirBudgetGlobal(plafond);
+    else await store.definirBudget(categorieId, plafond);
+    afficherToast(message);
+    await rafraichir();
+  });
+  ouvrirFormulairePlafond({
+    titre: global ? 'Budget global du mois' : `Budget ${categorie.emoji} ${categorie.nom}`,
+    plafond: global ? etat.donnees.budgetGlobal : (etat.donnees.budgets[categorieId] ?? null),
+    depense,
+    surValider: (plafond) => enregistrer(plafond, 'Budget enregistré'),
+    surRetirer: () => enregistrer(null, 'Plafond retiré'),
+  });
+}
+
 /* ===================== Actions transmises aux écrans ===================== */
 
 // Les écrans n'appellent jamais store.js directement : ils passent par ces fonctions
 const actions = {
   modifierTransaction: ouvrirModification,
+  modifierBudget: ouvrirBudget,
   changerFiltre(categorieId) {
     etat.filtre = categorieId;
     rendre();

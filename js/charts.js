@@ -56,7 +56,7 @@ export function creerGraphiqueBarres(lignes, titreAccessible) {
 const NIVEAUX = {
   ok: { couleur: 'var(--etat-ok)', symbole: '✓', libelle: 'Dans le budget' },
   alerte: { couleur: 'var(--etat-alerte)', symbole: '!', libelle: 'Attention, plus de 80 %' },
-  depasse: { couleur: 'var(--etat-depasse)', symbole: '✕', libelle: 'Budget dépassé' },
+  depasse: { couleur: 'var(--etat-depasse)', symbole: '✕', libelle: 'Plafond atteint ou dépassé' },
 };
 
 // Renvoie les infos d'affichage d'un niveau (« ok », « alerte », « depasse »)

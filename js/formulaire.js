@@ -2,7 +2,7 @@
 // Objectif : une saisie en 3 gestes → « + », taper le montant, toucher une catégorie, valider.
 
 import { creer, ouvrirFeuille, fermerFeuille } from './ui.js';
-import { parserMontant, centimesVersSaisie } from './money.js';
+import { parserMontant, centimesVersSaisie, formaterMontant } from './money.js';
 import { aujourdhui, estDateValide } from './dates.js';
 
 // Texte du bouton principal selon le mode et le type
@@ -171,4 +171,46 @@ export function ouvrirFormulaireTransaction({ categories, transaction = null, es
   formulaire.querySelector('[data-action="supprimer"]')?.addEventListener('click', () => surSupprimer());
 
   ouvrirFeuille(modification ? 'Modifier la transaction' : 'Nouvelle transaction', formulaire);
+}
+
+/**
+ * Ouvre la feuille « plafond mensuel » (budget d'une catégorie ou budget global).
+ * - titre : ex. « Budget Courses »
+ * - plafond : plafond actuel en centimes (ou null)
+ * - depense : dépensé ce mois-ci, affiché pour aider à choisir
+ * - surValider(centimes) / surRetirer() : fonctions async fournies par app.js
+ */
+export function ouvrirFormulairePlafond({ titre, plafond, depense, surValider, surRetirer }) {
+  const boutonValider = creer('button', { type: 'submit', class: 'bouton bouton--plein' }, 'Enregistrer');
+  const formulaire = creer('form', { class: 'formulaire', novalidate: true },
+    creerChampMontant(plafond ? centimesVersSaisie(plafond) : '', true),
+    creer('p', { class: 'aide aide--sous-champ' },
+      `Dépensé ce mois-ci : ${formaterMontant(depense)}. Ce plafond s'applique à tous les mois.`),
+    creer('p', { class: 'erreur', role: 'alert', hidden: true }),
+    creer('div', { class: 'feuille__actions' },
+      boutonValider,
+      plafond && creer('button', { type: 'button', class: 'bouton bouton--contour-danger bouton--plein', 'data-action': 'retirer' }, 'Retirer le plafond')),
+  );
+  formulaire.querySelector('label').textContent = 'Plafond mensuel';
+
+  formulaire.addEventListener('submit', async (evenement) => {
+    evenement.preventDefault();
+    const montant = parserMontant(formulaire.querySelector('#champ-montant').value);
+    if (montant === null) {
+      afficherErreur(formulaire, { erreur: 'Saisis un montant valide, par exemple 250.', champ: 'champ-montant' });
+      return;
+    }
+    boutonValider.disabled = true;
+    const reussi = await surValider(montant);
+    boutonValider.disabled = false;
+    if (reussi !== false) fermerFeuille();
+  });
+  formulaire.addEventListener('input', () => {
+    formulaire.querySelector('.erreur').hidden = true;
+  });
+  formulaire.querySelector('[data-action="retirer"]')?.addEventListener('click', async () => {
+    if ((await surRetirer()) !== false) fermerFeuille();
+  });
+
+  ouvrirFeuille(titre, formulaire);
 }
