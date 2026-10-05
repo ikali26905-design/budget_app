@@ -1,0 +1,10 @@
+{
+  "name": "mon-budget",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Suivi de budget personnel (PWA en JavaScript vanilla). Ce fichier sert uniquement à lancer les tests : aucune dépendance, aucune étape de build.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}
