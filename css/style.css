@@ -514,7 +514,9 @@ svg {
 /* ---------- 9. Pastilles de catégories (boutons radio stylés) ---------- */
 .pastilles {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* 3 colonnes sur téléphone : « Abonnements » tient en entier sans réduire la police.
+     minmax(0, 1fr) garantit des colonnes égales même avec un mot long. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin: 0 0 16px;
   padding: 0;
@@ -543,7 +545,8 @@ svg {
   justify-content: center;
   gap: 2px;
   min-height: 68px;
-  padding: 6px 2px;
+  padding: 6px 0;
+  letter-spacing: -0.01em;
   border-radius: var(--rayon-petit);
   background: var(--surface-2);
   border: 2px solid transparent;
@@ -552,8 +555,14 @@ svg {
   text-align: center;
   line-height: 1.15;
   cursor: pointer;
-  /* Coupe les noms longs proprement (« Abonnements ») */
+  hyphens: auto;
   overflow-wrap: anywhere;
+}
+
+@media (min-width: 480px) {
+  .pastilles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .pastille__emoji {
@@ -698,7 +707,25 @@ svg {
   transform: translate(-50%, 0);
 }
 
-/* ---------- 13. Écrans larges (ordinateur) ---------- */
+.dialogue--simple .dialogue__actions {
+  grid-template-columns: 1fr;
+}
+
+/* ---------- 13. Badge de catégorie (emoji dans un rond teinté) ---------- */
+/* La couleur de la catégorie arrive par la variable --couleur ; color-mix l'éclaircit pour le fond */
+.badge {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 1.25rem;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--couleur) 22%, transparent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--couleur) 55%, transparent);
+}
+
+/* ---------- 14. Écrans larges (ordinateur) ---------- */
 @media (min-width: 700px) {
   .contenu {
     padding-top: 16px;
