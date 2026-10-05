@@ -20,7 +20,7 @@ test('formaterMontant', () => {
   assert.equal(m.formaterMontant(123456).replace(/\s/g, ' '), '1 234,56 €');
   assert.equal(m.formaterMontantCourt(25000).replace(/\s/g, ' '), '250 €');
   assert.equal(m.formaterMontantCourt(25050).replace(/\s/g, ' '), '250,50 €');
-  assert.equal(m.formaterMontant(-1200).replace(/\s/g, ' '), '-12,00 €');
+  assert.equal(m.formaterMontant(-1200).replace(/\s/g, ' '), '−12,00 €');
   assert.equal(m.centimesVersSaisie(1205), '12,05');
 });
 test('dates', () => {
@@ -31,6 +31,8 @@ test('dates', () => {
   assert.equal(d.nomDuMois('2026-10'), 'Octobre 2026');
   assert.equal(d.libelleJour('2026-10-04', '2026-10-05'), 'Hier');
   assert.equal(d.libelleJour('2026-10-01', '2026-10-05'), 'Jeudi 1 octobre');
+  assert.equal(d.deMois('2026-10'), 'd’octobre');
+  assert.equal(d.deMois('2026-03'), 'de mars');
   assert.ok(!d.estDateValide('2026-02-30'));
   assert.ok(d.estDateValide('2026-02-28'));
 });

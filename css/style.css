@@ -725,7 +725,177 @@ svg {
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--couleur) 55%, transparent);
 }
 
-/* ---------- 14. Écrans larges (ordinateur) ---------- */
+/* ---------- 14. Accueil ---------- */
+.carte__titre {
+  font-size: 1rem;
+  margin-bottom: 12px;
+}
+
+/* Le solde du mois : l'information principale de l'écran */
+.carte-solde {
+  text-align: center;
+  padding: 24px 16px;
+}
+
+.carte-solde__label {
+  color: var(--texte-2);
+  font-weight: 600;
+}
+
+.carte-solde__montant {
+  font-size: clamp(2.5rem, 12vw, 3.25rem);
+  font-weight: 800;
+  line-height: 1.15;
+  margin: 4px 0;
+  letter-spacing: -0.02em;
+  font-variant-numeric: normal;
+}
+
+.carte-solde__montant--negatif,
+.montant--negatif {
+  color: var(--negatif);
+}
+
+.carte-solde__message {
+  color: var(--texte-2);
+}
+
+.tuiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.tuile {
+  background: var(--surface);
+  border-radius: var(--rayon);
+  box-shadow: var(--ombre);
+  padding: 12px 14px;
+}
+
+.tuile__label {
+  color: var(--texte-2);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.tuile--revenus .tuile__label span {
+  color: var(--positif);
+}
+
+.tuile--depenses .tuile__label span {
+  color: var(--negatif);
+}
+
+.tuile__montant {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.ligne-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* ---------- 15. Graphique en barres ---------- */
+.graphique {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.graphique__legende {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.graphique__nom {
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graphique__pourcent {
+  color: var(--texte-3);
+  font-size: 0.875rem;
+  display: inline-block;
+  min-width: 3.2em;
+  text-align: right;
+}
+
+.barre-svg {
+  display: block;
+  width: 100%;
+  height: 12px;
+  stroke: none; /* annule le trait hérité de la règle des icônes */
+}
+
+.barre-svg__piste {
+  fill: var(--surface-2);
+}
+
+/* ---------- 16. Jauges de budget ---------- */
+.jauge__entete {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.jauge__titre {
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jauge__pied {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 0.875rem;
+  color: var(--texte-2);
+}
+
+.jauge__symbole {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #ffffff;
+  background: var(--etat-ok);
+}
+
+.jauge__pied--alerte .jauge__symbole {
+  background: var(--etat-alerte);
+}
+
+.jauge__pied--depasse .jauge__symbole {
+  background: var(--etat-depasse);
+}
+
+.jauge__pied--depasse {
+  color: var(--negatif);
+  font-weight: 600;
+}
+
+/* ---------- 17. Écrans larges (ordinateur) ---------- */
 @media (min-width: 700px) {
   .contenu {
     padding-top: 16px;

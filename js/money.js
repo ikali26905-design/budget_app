@@ -30,14 +30,15 @@ export function parserMontant(texte) {
   return total;
 }
 
-// Formate des centimes en texte français : 123456 → « 1 234,56 € »
+// Formate des centimes en texte français : 123456 → « 1 234,56 € » (vrai signe moins « − » si négatif)
 export function formaterMontant(centimes) {
-  return formateurEuros.format(centimes / 100);
+  return formateurEuros.format(centimes / 100).replace('-', '−');
 }
 
 // Comme formaterMontant, mais sans « ,00 » pour les montants ronds : 25000 → « 250 € »
 export function formaterMontantCourt(centimes) {
-  return centimes % 100 === 0 ? formateurEurosRond.format(centimes / 100) : formaterMontant(centimes);
+  if (centimes % 100 !== 0) return formaterMontant(centimes);
+  return formateurEurosRond.format(centimes / 100).replace('-', '−');
 }
 
 // Formate avec un signe explicite selon le type : « +1 200,00 € » ou « −45,90 € »

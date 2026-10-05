@@ -11,6 +11,7 @@ import { aujourdhui, moisDe, decalerMois, nomDuMois } from './dates.js';
 import { genererOccurrences } from './calculs.js';
 import { afficherToast, informer } from './ui.js';
 import { ouvrirFormulaireTransaction } from './formulaire.js';
+import { rendreAccueil } from './ecrans.js';
 
 // État de l'interface (les données elles-mêmes viennent toujours de store.js)
 const etat = {
@@ -50,9 +51,16 @@ function rendreEnTete() {
   document.getElementById('titre-reglages').hidden = !surReglages;
 }
 
+// Fonctions de rendu de chaque écran
+const RENDUS = {
+  accueil: rendreAccueil,
+};
+
 // Affiche l'écran courant et met à jour l'onglet actif
 function rendre() {
   rendreEnTete();
+  const conteneur = document.getElementById(`ecran-${etat.ecran}`);
+  RENDUS[etat.ecran]?.(conteneur, { donnees: etat.donnees, mois: etat.mois });
   document.querySelectorAll('.ecran').forEach((ecran) => {
     ecran.hidden = ecran.dataset.ecran !== etat.ecran;
   });

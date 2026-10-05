@@ -65,6 +65,12 @@ export function nomDuMoisSeul(mois) {
   return formateurMoisSeul.format(versDateUTC(`${mois}-01`));
 }
 
+// « de octobre » → « d'octobre » : élision devant une voyelle (avril, août, octobre)
+export function deMois(mois) {
+  const nom = nomDuMoisSeul(mois);
+  return /^[aeiouéâ]/i.test(nom) ? `d’${nom}` : `de ${nom}`;
+}
+
 // Libellé d'un jour : « Aujourd'hui », « Hier » ou « Lundi 5 octobre »
 export function libelleJour(date, reference = aujourdhui()) {
   if (date === reference) return "Aujourd'hui";
