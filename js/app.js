@@ -403,11 +403,28 @@ function brancherEvenements() {
 
 /* ===================== Démarrage ===================== */
 
+// Enregistre le service worker (hors connexion). Il n'existe qu'en HTTPS ou sur localhost.
+function enregistrerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('./sw.js').catch((erreur) => console.warn('Service worker non enregistré :', erreur));
+}
+
+// Quand on revient sur l'app (ouverte en arrière-plan depuis hier), on crée les récurrences du jour
+function surRetourDansApp() {
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState !== 'visible') return;
+    const crees = await appliquerRecurrences().catch(() => 0);
+    if (crees > 0) await rafraichir();
+  });
+}
+
 // Lance l'application
 async function demarrer() {
   brancherEvenements();
+  surRetourDansApp();
   await executer(appliquerRecurrences);
   await rafraichir();
+  enregistrerServiceWorker();
 }
 
 demarrer();
