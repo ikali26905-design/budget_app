@@ -21,9 +21,10 @@
   --texte-3: #6b6a65;
 
   /* Accent (boutons principaux, onglet actif) */
-  --accent: #2a78d6;
+  --accent: #256abf;
   --accent-texte: #ffffff;
   --accent-doux: #e3eefb;
+  --accent-actif: #256abf;    /* texte de l'onglet actif (contraste ≥ 4,5:1) */
   --lien: #1c5cab;
 
   /* Sens des montants (texte) */
@@ -66,9 +67,10 @@
     --texte: #ffffff;
     --texte-2: #c3c2b7;
     --texte-3: #a3a29a;
-    --accent: #2a78d6;
+    --accent: #256abf;
     --accent-texte: #ffffff;
     --accent-doux: #1a2c42;
+    --accent-actif: #6da7ec;
     --lien: #86b6ef;
     --positif: #3fc23f;
     --negatif: #ff8a8a;
@@ -203,8 +205,8 @@ svg {
   background: none;
   color: var(--lien);
   font-size: 0.875rem;
-  padding: 4px 8px;
-  min-height: 32px;
+  padding: 0 12px;
+  min-height: 44px;
 }
 
 /* ---------- 4. Boutons ---------- */
@@ -320,7 +322,7 @@ svg {
 }
 
 .onglet[aria-current="page"] {
-  color: var(--accent);
+  color: var(--accent-actif);
 }
 
 /* Petite pilule derrière l'icône de l'onglet actif */
@@ -502,9 +504,9 @@ svg {
 }
 
 .segment input:checked + label {
-  background: var(--surface);
-  color: var(--texte);
-  box-shadow: var(--ombre);
+  background: var(--accent-doux);
+  color: var(--accent-actif);
+  box-shadow: inset 0 0 0 2px var(--accent-actif);
 }
 
 .segment input:focus-visible + label {
