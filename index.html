@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <!-- viewport-fit=cover : l'app peut utiliser toute la surface, y compris sous l'encoche (on gère les marges avec env(safe-area-inset-*)) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Mon Budget</title>
+  <meta name="description" content="Suivi de budget personnel : dépenses, revenus et plafonds par catégorie.">
+
+  <!-- Couleur de la barre du navigateur, différente selon le thème du téléphone -->
+  <meta name="theme-color" content="#f6f6f3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121211" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
+
+  <!-- PWA : manifeste + icônes (iOS utilise apple-touch-icon) -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Budget">
+
+  <link rel="stylesheet" href="css/style.css">
+  <!-- type="module" : active les imports ES ; le script est automatiquement différé (exécuté après le HTML) -->
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <div class="app">
+
+    <!-- ===== En-tête : navigation entre les mois (cachée sur Réglages) ===== -->
+    <header class="entete">
+      <div class="nav-mois" id="nav-mois">
+        <button type="button" class="bouton-icone" id="mois-precedent" aria-label="Mois précédent">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="nav-mois__centre">
+          <h1 class="nav-mois__titre" id="titre-mois" aria-live="polite">—</h1>
+          <button type="button" class="lien-discret" id="mois-actuel" hidden>Revenir à ce mois-ci</button>
+        </div>
+        <button type="button" class="bouton-icone" id="mois-suivant" aria-label="Mois suivant">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+      </div>
+      <h1 class="entete__titre" id="titre-reglages" hidden>Réglages</h1>
+    </header>
+
+    <!-- ===== Les 4 écrans : un seul est visible à la fois ===== -->
+    <main class="contenu">
+      <section class="ecran" id="ecran-accueil" data-ecran="accueil" aria-label="Accueil"></section>
+      <section class="ecran" id="ecran-historique" data-ecran="historique" aria-label="Historique" hidden></section>
+      <section class="ecran" id="ecran-budgets" data-ecran="budgets" aria-label="Budgets" hidden></section>
+      <section class="ecran" id="ecran-reglages" data-ecran="reglages" aria-label="Réglages" hidden></section>
+    </main>
+
+    <!-- ===== Bouton flottant « + » ===== -->
+    <button type="button" class="fab" id="bouton-ajouter" aria-label="Ajouter une transaction">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+
+    <!-- ===== Barre d'onglets en bas ===== -->
+    <nav class="onglets" aria-label="Navigation principale">
+      <button type="button" class="onglet" data-cible="accueil" aria-current="page">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
+        <span>Accueil</span>
+      </button>
+      <button type="button" class="onglet" data-cible="historique">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>
+        <span>Historique</span>
+      </button>
+      <button type="button" class="onglet" data-cible="budgets">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+        <span>Budgets</span>
+      </button>
+      <button type="button" class="onglet" data-cible="reglages">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        <span>Réglages</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ===== Feuille modale (bottom sheet) : son contenu est injecté par JS ===== -->
+  <!-- <dialog> natif + showModal() : gère le focus, la touche Échap et le fond assombri pour nous -->
+  <dialog class="feuille" id="feuille" aria-labelledby="feuille-titre">
+    <div class="feuille__poignee" aria-hidden="true"></div>
+    <div class="feuille__entete">
+      <h2 class="feuille__titre" id="feuille-titre"></h2>
+      <button type="button" class="bouton-icone" data-fermer aria-label="Fermer">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="feuille__corps" id="feuille-corps"></div>
+  </dialog>
+
+  <!-- ===== Boîte de confirmation (remplace confirm()) ===== -->
+  <dialog class="dialogue" id="dialogue" aria-labelledby="dialogue-titre" aria-describedby="dialogue-message">
+    <h2 class="dialogue__titre" id="dialogue-titre"></h2>
+    <p class="dialogue__message" id="dialogue-message"></p>
+    <div class="dialogue__actions">
+      <button type="button" class="bouton bouton--secondaire" id="dialogue-annuler">Annuler</button>
+      <button type="button" class="bouton" id="dialogue-valider">OK</button>
+    </div>
+  </dialog>
+
+  <!-- ===== Message éphémère (toast), annoncé aux lecteurs d'écran ===== -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <!-- Message si JavaScript est désactivé -->
+  <noscript><p class="noscript">Cette application a besoin de JavaScript pour fonctionner.</p></noscript>
+</body>
+</html>
