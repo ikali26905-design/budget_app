@@ -20,11 +20,38 @@ function somme(transactions) {
   return transactions.reduce((total, t) => total + t.montant, 0);
 }
 
-// Calcule revenus, dépenses et solde (revenus − dépenses) d'une liste de transactions
+// Quatre types de mouvement : « depense » et « epargne » (versement) font sortir l'argent du budget,
+// « revenu » et « retrait » (d'épargne) l'y font entrer.
+
+// Vrai si le type concerne l'épargne (versement ou retrait)
+export function estEpargne(type) {
+  return type === 'epargne' || type === 'retrait';
+}
+
+// Type de catégorie attendu pour un type de transaction (« retrait » → catégorie « epargne »)
+export function typeDeCategorie(typeTransaction) {
+  return estEpargne(typeTransaction) ? 'epargne' : typeTransaction;
+}
+
+// Calcule revenus, dépenses, épargne nette (versements − retraits) et solde disponible
 export function calculerTotaux(transactions) {
-  const revenus = somme(transactions.filter((t) => t.type === 'revenu'));
-  const depenses = somme(transactions.filter((t) => t.type === 'depense'));
-  return { revenus, depenses, solde: revenus - depenses };
+  const total = (type) => somme(transactions.filter((t) => t.type === type));
+  const revenus = total('revenu');
+  const depenses = total('depense');
+  const epargne = total('epargne') - total('retrait');
+  return { revenus, depenses, epargne, solde: revenus - depenses - epargne };
+}
+
+// Solde de chaque compte d'épargne jusqu'à une date incluse : Map { idCompte → centimes }
+// (idExclu permet d'ignorer une transaction, par exemple celle qu'on est en train de modifier)
+export function calculerSoldesEpargne(transactions, dateLimite = '9999-12-31', idExclu = null) {
+  const soldes = new Map();
+  for (const t of transactions) {
+    if (!estEpargne(t.type) || t.date > dateLimite || t.id === idExclu) continue;
+    const signe = t.type === 'epargne' ? 1 : -1;
+    soldes.set(t.categorieId, (soldes.get(t.categorieId) ?? 0) + signe * t.montant);
+  }
+  return soldes;
 }
 
 // Solde cumulé : toutes les transactions depuis le début jusqu'à la fin du mois donné
@@ -33,7 +60,7 @@ export function calculerSoldeCumule(transactions, mois) {
   return calculerTotaux(transactions.filter((t) => t.date <= limite)).solde;
 }
 
-// Total par catégorie pour un type (« depense » ou « revenu »), trié du plus gros au plus petit
+// Total par catégorie pour un type (« depense », « revenu »…), trié du plus gros au plus petit
 export function calculerTotalParCategorie(transactions, type = 'depense') {
   const totaux = new Map();
   for (const t of transactions) {

@@ -45,7 +45,7 @@ const tx = [
 ];
 test('totaux et soldes', () => {
   const oct = c.transactionsDuMois(tx, '2026-10');
-  assert.deepEqual(c.calculerTotaux(oct), { revenus: 20000, depenses: 49890, solde: -29890 });
+  assert.deepEqual(c.calculerTotaux(oct), { revenus: 20000, depenses: 49890, epargne: 0, solde: -29890 });
   assert.equal(c.calculerSoldeCumule(tx, '2026-10'), 80000 - 29890);
   assert.equal(c.calculerSoldeCumule(tx, '2026-09'), 80000);
   assert.deepEqual(c.calculerTotalParCategorie(oct), [{ categorieId: 'logement', total: 45000 }, { categorieId: 'courses', total: 4890 }]);
@@ -88,6 +88,7 @@ const donneesIO = {
   recurrentes: [{ id: 'r1', type: 'revenu', montant: 80000, categorieId: 'job', jour: 1, note: '', dernierMois: '2026-10' }],
   budgets: { courses: 25000 },
   budgetGlobal: null,
+  objectifs: {},
 };
 test('export CSV', () => {
   const lignes = io.genererCSV(donneesIO).split('\r\n');
@@ -112,4 +113,53 @@ test('import : fichiers invalides refusés avec un message clair', () => {
   const mauvaiseDate = structuredClone(donneesIO);
   mauvaiseDate.transactions[0].date = '2026-02-30';
   assert.match(io.validerImport(mauvaiseDate).erreur, /date invalide/);
+});
+
+const mouvementsEpargne = [
+  { id: 'r', type: 'revenu', montant: 100000, categorieId: 'job', date: '2026-10-01', creeLe: 1 },
+  { id: 'd', type: 'depense', montant: 30000, categorieId: 'courses', date: '2026-10-02', creeLe: 2 },
+  { id: 'v1', type: 'epargne', montant: 20000, categorieId: 'livret', date: '2026-09-15', creeLe: 3 },
+  { id: 'v2', type: 'epargne', montant: 15000, categorieId: 'livret', date: '2026-10-03', creeLe: 4 },
+  { id: 'v3', type: 'epargne', montant: 5000, categorieId: 'voyage', date: '2026-10-04', creeLe: 5 },
+  { id: 'x1', type: 'retrait', montant: 4000, categorieId: 'livret', date: '2026-10-10', creeLe: 6 },
+];
+test('épargne : le solde du mois déduit l’épargne nette', () => {
+  const oct = c.transactionsDuMois(mouvementsEpargne, '2026-10');
+  // épargne nette = 150 + 50 − 40 = 160 € ; solde = 1000 − 300 − 160 = 540 €
+  assert.deepEqual(c.calculerTotaux(oct), { revenus: 100000, depenses: 30000, epargne: 16000, solde: 54000 });
+});
+test('épargne : solde de chaque compte, à une date et en excluant une transaction', () => {
+  const soldes = c.calculerSoldesEpargne(mouvementsEpargne);
+  assert.equal(soldes.get('livret'), 20000 + 15000 - 4000);
+  assert.equal(soldes.get('voyage'), 5000);
+  assert.equal(c.calculerSoldesEpargne(mouvementsEpargne, '2026-09-30').get('livret'), 20000);
+  assert.equal(c.calculerSoldesEpargne(mouvementsEpargne, undefined, 'x1').get('livret'), 35000);
+  assert.equal(c.typeDeCategorie('retrait'), 'epargne');
+  assert.equal(m.formaterMontantSigne(4000, 'retrait').replace(/\s/g, ' '), '+40,00 €');
+  assert.equal(m.formaterMontantSigne(4000, 'epargne').replace(/\s/g, ' '), '−40,00 €');
+});
+const donneesEpargne = {
+  ...structuredClone(donneesIO),
+  categories: [...donneesIO.categories, { id: 'livret', nom: 'Livret A', emoji: '🏦', type: 'epargne', couleur: 1 }],
+  transactions: [
+    { id: 'v', type: 'epargne', montant: 5000, categorieId: 'livret', date: '2026-10-06', note: '', recurrenteId: null, creeLe: 3 },
+    { id: 'x', type: 'retrait', montant: 1000, categorieId: 'livret', date: '2026-10-07', note: '', recurrenteId: null, creeLe: 4 },
+  ],
+  objectifs: { livret: 100000 },
+};
+test('épargne : CSV et aller-retour JSON', () => {
+  const lignes = io.genererCSV(donneesEpargne).split('\r\n');
+  assert.equal(lignes[1], '2026-10-06;Épargne (versement);Livret A;-50,00;;non');
+  assert.equal(lignes[2], '2026-10-07;Épargne (retrait);Livret A;10,00;;non');
+  const r = io.validerImport(JSON.parse(io.genererJSON(donneesEpargne)));
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.donnees, donneesEpargne);
+});
+test('import : une transaction doit viser une catégorie du bon type', () => {
+  const incoherent = structuredClone(donneesEpargne);
+  incoherent.transactions[0].categorieId = 'courses'; // versement d'épargne dans « Courses »
+  assert.match(io.validerImport(incoherent).erreur, /catégorie d'un autre type/);
+  const ancien = structuredClone(donneesIO); // fichier d'avant l'épargne : accepté
+  delete ancien.objectifs;
+  assert.equal(io.validerImport(ancien).ok, true);
 });

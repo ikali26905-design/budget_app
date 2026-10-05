@@ -41,9 +41,10 @@ export function formaterMontantCourt(centimes) {
   return formateurEurosRond.format(centimes / 100).replace('-', '−');
 }
 
-// Formate avec un signe explicite selon le type : « +1 200,00 € » ou « −45,90 € »
+// Formate avec un signe explicite selon le type : « +1 200,00 € » (revenu, retrait d'épargne)
+// ou « −45,90 € » (dépense, versement d'épargne : l'argent quitte le budget du mois)
 export function formaterMontantSigne(centimes, type) {
-  const signe = type === 'revenu' ? '+' : '−';
+  const signe = type === 'revenu' || type === 'retrait' ? '+' : '−';
   return signe + formaterMontant(centimes);
 }
 

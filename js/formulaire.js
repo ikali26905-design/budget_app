@@ -2,23 +2,41 @@
 // Objectif : une saisie en 3 gestes → « + », taper le montant, toucher une catégorie, valider.
 
 import { creer, ouvrirFeuille, fermerFeuille } from './ui.js';
-import { parserMontant, centimesVersSaisie, formaterMontant } from './money.js';
+import { parserMontant, centimesVersSaisie } from './money.js';
 import { aujourdhui, estDateValide } from './dates.js';
+import { typeDeCategorie } from './calculs.js';
+
+// Les trois grandes familles (aussi utilisées pour les catégories)
+const FAMILLES = [['depense', 'Dépense'], ['revenu', 'Revenu'], ['epargne', 'Épargne']];
+// Pour l'épargne : mettre de côté (versement) ou reprendre de l'argent (retrait)
+const SENS_EPARGNE = [['epargne', 'Mettre de côté'], ['retrait', 'Retirer']];
 
 // Texte du bouton principal selon le mode et le type
+const LIBELLES_AJOUT = {
+  depense: 'Ajouter la dépense',
+  revenu: 'Ajouter le revenu',
+  epargne: 'Mettre de côté',
+  retrait: 'Retirer de l’épargne',
+};
+
+// Renvoie le texte du bouton principal
 function libelleBouton(modification, type) {
-  if (modification) return 'Enregistrer';
-  return type === 'revenu' ? 'Ajouter le revenu' : 'Ajouter la dépense';
+  return modification ? 'Enregistrer' : LIBELLES_AJOUT[type];
 }
 
-// Crée le sélecteur « Dépense / Revenu » (deux boutons radio stylés en segment)
-function creerSelecteurType(typeInitial) {
-  const option = (valeur, libelle) => [
-    creer('input', { type: 'radio', name: 'type', id: `type-${valeur}`, value: valeur, checked: valeur === typeInitial }),
-    creer('label', { for: `type-${valeur}` }, libelle),
+// Crée un sélecteur en segment (boutons radio stylés) ; options = [[valeur, libellé], ...]
+function creerSelecteurType(valeurInitiale, { nom = 'type', options = FAMILLES, libelle = 'Type de transaction' } = {}) {
+  const option = ([valeur, texte]) => [
+    creer('input', { type: 'radio', name: nom, id: `${nom}-${valeur}`, value: valeur, checked: valeur === valeurInitiale }),
+    creer('label', { for: `${nom}-${valeur}` }, texte),
   ];
-  return creer('div', { class: 'segment', role: 'radiogroup', 'aria-label': 'Type de transaction' },
-    option('depense', 'Dépense'), option('revenu', 'Revenu'));
+  return creer('div', { class: 'segment', role: 'radiogroup', 'aria-label': libelle }, options.map(option));
+}
+
+// Type réel saisi : « depense », « revenu », ou pour l'épargne « epargne » / « retrait »
+function typeSaisi(formulaire) {
+  const famille = formulaire.querySelector('input[name="type"]:checked').value;
+  return famille === 'epargne' ? formulaire.querySelector('input[name="sens"]:checked').value : famille;
 }
 
 // Crée le gros champ « Montant » qui ouvre le clavier numérique
@@ -41,10 +59,10 @@ function creerChampMontant(valeurInitiale, autofocus) {
   );
 }
 
-// Crée la grille de pastilles de catégories pour un type donné
-function creerPastilles(categories, type, categorieChoisie) {
+// Crée la grille de pastilles de catégories pour une famille (« depense », « revenu », « epargne »)
+function creerPastilles(categories, famille, categorieChoisie) {
   const pastilles = categories
-    .filter((c) => c.type === type)
+    .filter((c) => c.type === famille)
     .map((c) => creer('div', { class: 'pastille' },
       creer('input', { type: 'radio', name: 'categorie', id: `cat-${c.id}`, value: c.id, checked: c.id === categorieChoisie }),
       creer('label', { for: `cat-${c.id}` },
@@ -52,7 +70,7 @@ function creerPastilles(categories, type, categorieChoisie) {
         c.nom),
     ));
   return creer('fieldset', { class: 'pastilles', id: 'pastilles' },
-    creer('legend', { class: 'champ__label' }, 'Catégorie'),
+    creer('legend', { class: 'champ__label' }, famille === 'epargne' ? 'Compte d’épargne' : 'Catégorie'),
     pastilles);
 }
 
@@ -82,15 +100,18 @@ function creerCaseRecurrente(cochee) {
 // Lit et valide le formulaire ; renvoie { valeurs } ou { erreur, champ }
 function lireFormulaire(formulaire) {
   const donnees = new FormData(formulaire);
+  const type = typeSaisi(formulaire);
   const montant = parserMontant(donnees.get('montant'));
   if (montant === null) return { erreur: 'Saisis un montant valide, par exemple 12,50.', champ: 'champ-montant' };
   const categorieId = donnees.get('categorie');
-  if (!categorieId) return { erreur: 'Choisis une catégorie.', champ: 'pastilles' };
+  if (!categorieId) {
+    return { erreur: typeDeCategorie(type) === 'epargne' ? 'Choisis un compte d’épargne.' : 'Choisis une catégorie.', champ: 'pastilles' };
+  }
   const date = donnees.get('date');
   if (!estDateValide(date)) return { erreur: 'Choisis une date valide.', champ: 'champ-date' };
   return {
     valeurs: {
-      type: donnees.get('type'),
+      type,
       montant,
       categorieId,
       date,
@@ -126,11 +147,18 @@ export function ouvrirFormulaireTransaction({ categories, transaction = null, es
   const modification = transaction !== null;
   const initial = transaction ?? { type: typeParDefaut, montant: null, categorieId: null, date: aujourdhui(), note: '' };
 
+  const famille = typeDeCategorie(initial.type);
   const boutonValider = creer('button', { type: 'submit', class: 'bouton bouton--plein' }, libelleBouton(modification, initial.type));
+  // Second sélecteur, visible seulement pour l'épargne : « Mettre de côté » ou « Retirer »
+  const selecteurSens = creerSelecteurType(initial.type === 'retrait' ? 'retrait' : 'epargne',
+    { nom: 'sens', options: SENS_EPARGNE, libelle: 'Sens du mouvement d’épargne' });
+  selecteurSens.classList.add('segment--secondaire');
+  selecteurSens.hidden = famille !== 'epargne';
   const formulaire = creer('form', { class: 'formulaire', novalidate: true },
-    creerSelecteurType(initial.type),
+    creerSelecteurType(famille),
+    selecteurSens,
     creerChampMontant(initial.montant ? centimesVersSaisie(initial.montant) : '', !modification),
-    creerPastilles(categories, initial.type, initial.categorieId),
+    creerPastilles(categories, famille, initial.categorieId),
     creerDateEtNote(initial.date, initial.note),
     creerCaseRecurrente(estRecurrente),
     creer('p', { class: 'erreur', role: 'alert', hidden: true }),
@@ -140,12 +168,14 @@ export function ouvrirFormulaireTransaction({ categories, transaction = null, es
     ),
   );
 
-  // Changement de type : on réaffiche les pastilles correspondantes et le libellé du bouton
+  // Changement de type : on réaffiche les pastilles de la bonne famille et le libellé du bouton
   formulaire.addEventListener('change', (evenement) => {
-    if (evenement.target.name !== 'type') return;
-    const type = evenement.target.value;
-    formulaire.querySelector('#pastilles').replaceWith(creerPastilles(categories, type, null));
-    boutonValider.textContent = libelleBouton(modification, type);
+    const { name, value } = evenement.target;
+    if (name === 'type') {
+      formulaire.querySelector('#pastilles').replaceWith(creerPastilles(categories, value, null));
+      selecteurSens.hidden = value !== 'epargne';
+    }
+    if (name === 'type' || name === 'sens') boutonValider.textContent = libelleBouton(modification, typeSaisi(formulaire));
   });
 
   // Dès qu'on corrige un champ, on retire le message d'erreur
@@ -174,24 +204,23 @@ export function ouvrirFormulaireTransaction({ categories, transaction = null, es
 }
 
 /**
- * Ouvre la feuille « plafond mensuel » (budget d'une catégorie ou budget global).
+ * Ouvre une feuille « montant limite » : plafond de budget ou objectif d'épargne.
  * - titre : ex. « Budget Courses »
- * - plafond : plafond actuel en centimes (ou null)
- * - depense : dépensé ce mois-ci, affiché pour aider à choisir
+ * - valeur : montant actuel en centimes (ou null)
+ * - libelleChamp / aide / libelleRetirer : textes affichés
  * - surValider(centimes) / surRetirer() : fonctions async fournies par app.js
  */
-export function ouvrirFormulairePlafond({ titre, plafond, depense, surValider, surRetirer }) {
+export function ouvrirFormulaireMontantCible({ titre, valeur, libelleChamp, aide, libelleRetirer, surValider, surRetirer }) {
   const boutonValider = creer('button', { type: 'submit', class: 'bouton bouton--plein' }, 'Enregistrer');
   const formulaire = creer('form', { class: 'formulaire', novalidate: true },
-    creerChampMontant(plafond ? centimesVersSaisie(plafond) : '', true),
-    creer('p', { class: 'aide aide--sous-champ' },
-      `Dépensé ce mois-ci : ${formaterMontant(depense)}. Ce plafond s'applique à tous les mois.`),
+    creerChampMontant(valeur ? centimesVersSaisie(valeur) : '', true),
+    creer('p', { class: 'aide aide--sous-champ' }, aide),
     creer('p', { class: 'erreur', role: 'alert', hidden: true }),
     creer('div', { class: 'feuille__actions' },
       boutonValider,
-      plafond && creer('button', { type: 'button', class: 'bouton bouton--contour-danger bouton--plein', 'data-action': 'retirer' }, 'Retirer le plafond')),
+      valeur && creer('button', { type: 'button', class: 'bouton bouton--contour-danger bouton--plein', 'data-action': 'retirer' }, libelleRetirer)),
   );
-  formulaire.querySelector('label').textContent = 'Plafond mensuel';
+  formulaire.querySelector('label').textContent = libelleChamp;
 
   formulaire.addEventListener('submit', async (evenement) => {
     evenement.preventDefault();
@@ -236,7 +265,7 @@ export function ouvrirFormulaireCategorie({ type, nomExiste, surValider }) {
       creer('input', { type: 'radio', name: 'emoji', id: `emoji-${i}`, value: emoji, checked: i === 0 }),
       creer('label', { for: `emoji-${i}` }, emoji))));
   const formulaire = creer('form', { class: 'formulaire', novalidate: true },
-    creerSelecteurType(type),
+    creerSelecteurType(type, { libelle: 'Type de catégorie' }),
     creer('div', { class: 'champ' },
       creer('label', { class: 'champ__label', for: 'champ-nom' }, 'Nom'),
       creer('input', { class: 'champ__input', id: 'champ-nom', name: 'nom', maxlength: 24, autocomplete: 'off', autofocus: true, placeholder: 'Ex. : Restaurants' })),

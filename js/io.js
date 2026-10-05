@@ -3,8 +3,18 @@
 
 import { MONTANT_MAX } from './money.js';
 import { aujourdhui, estDateValide } from './dates.js';
+import { typeDeCategorie } from './calculs.js';
 
-const TYPES = ['depense', 'revenu'];
+const TYPES_CATEGORIES = ['depense', 'revenu', 'epargne'];
+const TYPES_TRANSACTIONS = ['depense', 'revenu', 'epargne', 'retrait'];
+
+// Libellé de chaque type de transaction dans le fichier CSV
+const LIBELLES_CSV = {
+  depense: 'Dépense',
+  revenu: 'Revenu',
+  epargne: 'Épargne (versement)',
+  retrait: 'Épargne (retrait)',
+};
 const MARQUEUR = 'mon-budget'; // permet de reconnaître nos propres fichiers à l'import
 
 /* ===================== Export ===================== */
@@ -28,8 +38,9 @@ function champCSV(valeur) {
 }
 
 // Montant signé pour un tableur français : 1890 centimes (dépense) → « -18,90 »
+// (comme dans l'app : dépense et versement d'épargne sortent du budget, donc négatifs)
 function montantCSV(transaction) {
-  const signe = transaction.type === 'depense' ? '-' : '';
+  const signe = transaction.type === 'depense' || transaction.type === 'epargne' ? '-' : '';
   const euros = Math.floor(transaction.montant / 100);
   const centimes = String(transaction.montant % 100).padStart(2, '0');
   return `${signe}${euros},${centimes}`;
@@ -43,7 +54,7 @@ export function genererCSV(donnees) {
     .sort((a, b) => a.date.localeCompare(b.date) || a.creeLe - b.creeLe)
     .map((t) => [
       t.date,
-      t.type === 'revenu' ? 'Revenu' : 'Dépense',
+      LIBELLES_CSV[t.type],
       champCSV(categories.get(t.categorieId) ?? 'Sans catégorie'),
       montantCSV(t), // pas de champCSV ici : le « - » d'un montant négatif doit rester un nombre
       champCSV(t.note ?? ''),
@@ -83,18 +94,24 @@ function estMontant(valeur) {
 function nettoyerCategorie(c, i) {
   verifier(c && typeof c.id === 'string' && c.id, `Catégorie n°${i + 1} : identifiant manquant.`);
   verifier(typeof c.nom === 'string' && c.nom.trim(), `Catégorie n°${i + 1} : nom manquant.`);
-  verifier(TYPES.includes(c.type), `Catégorie « ${c.nom} » : type inconnu.`);
+  verifier(TYPES_CATEGORIES.includes(c.type), `Catégorie « ${c.nom} » : type inconnu.`);
   const couleur = Number.isInteger(c.couleur) && c.couleur >= 1 && c.couleur <= 8 ? c.couleur : 8;
   return { id: c.id, nom: c.nom.trim().slice(0, 40), emoji: typeof c.emoji === 'string' && c.emoji ? c.emoji.slice(0, 8) : '📦', type: c.type, couleur };
 }
 
+// Vérifie que la catégorie existe et correspond au type (ex. un retrait doit viser un compte d'épargne)
+function verifierCategorie(element, nom, typesCategories) {
+  verifier(typesCategories.has(element.categorieId), `${nom} : catégorie inconnue.`);
+  verifier(typesCategories.get(element.categorieId) === typeDeCategorie(element.type), `${nom} : catégorie d'un autre type.`);
+}
+
 // Valide et nettoie une transaction importée
-function nettoyerTransaction(t, i, idsCategories) {
+function nettoyerTransaction(t, i, typesCategories) {
   const nom = `Transaction n°${i + 1}`;
   verifier(t && typeof t.id === 'string' && t.id, `${nom} : identifiant manquant.`);
-  verifier(TYPES.includes(t.type), `${nom} : type inconnu.`);
+  verifier(TYPES_TRANSACTIONS.includes(t.type), `${nom} : type inconnu.`);
   verifier(estMontant(t.montant), `${nom} : montant invalide (il doit être en centimes, entier et positif).`);
-  verifier(idsCategories.has(t.categorieId), `${nom} : catégorie inconnue.`);
+  verifierCategorie(t, nom, typesCategories);
   verifier(estDateValide(t.date), `${nom} : date invalide.`);
   return {
     id: t.id,
@@ -109,12 +126,12 @@ function nettoyerTransaction(t, i, idsCategories) {
 }
 
 // Valide et nettoie un modèle de transaction mensuelle importé
-function nettoyerRecurrente(r, i, idsCategories) {
+function nettoyerRecurrente(r, i, typesCategories) {
   const nom = `Transaction mensuelle n°${i + 1}`;
   verifier(r && typeof r.id === 'string' && r.id, `${nom} : identifiant manquant.`);
-  verifier(TYPES.includes(r.type), `${nom} : type inconnu.`);
+  verifier(TYPES_TRANSACTIONS.includes(r.type), `${nom} : type inconnu.`);
   verifier(estMontant(r.montant), `${nom} : montant invalide.`);
-  verifier(idsCategories.has(r.categorieId), `${nom} : catégorie inconnue.`);
+  verifierCategorie(r, nom, typesCategories);
   verifier(Number.isInteger(r.jour) && r.jour >= 1 && r.jour <= 31, `${nom} : jour invalide.`);
   verifier(typeof r.dernierMois === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(r.dernierMois), `${nom} : mois invalide.`);
   return { id: r.id, type: r.type, montant: r.montant, categorieId: r.categorieId, jour: r.jour, note: typeof r.note === 'string' ? r.note.slice(0, 80) : '', dernierMois: r.dernierMois };
@@ -135,12 +152,13 @@ export function validerImport(objet) {
     verifier(Array.isArray(objet.categories) && Array.isArray(objet.transactions), "Ce fichier n'est pas une sauvegarde de Mon Budget.");
     const categories = objet.categories.map(nettoyerCategorie);
     verifierIdsUniques(categories, 'catégories');
-    verifier(TYPES.every((type) => categories.some((c) => c.type === type)), 'Le fichier doit contenir au moins une catégorie de dépense et une de revenu.');
-    const idsCategories = new Set(categories.map((c) => c.id));
+    // Les comptes d'épargne sont facultatifs : les fichiers d'avant l'épargne n'en ont pas (ils seront ajoutés)
+    verifier(['depense', 'revenu'].every((type) => categories.some((c) => c.type === type)), 'Le fichier doit contenir au moins une catégorie de dépense et une de revenu.');
+    const typesCategories = new Map(categories.map((c) => [c.id, c.type]));
 
-    const transactions = objet.transactions.map((t, i) => nettoyerTransaction(t, i, idsCategories));
+    const transactions = objet.transactions.map((t, i) => nettoyerTransaction(t, i, typesCategories));
     verifierIdsUniques(transactions, 'transactions');
-    const recurrentes = (Array.isArray(objet.recurrentes) ? objet.recurrentes : []).map((r, i) => nettoyerRecurrente(r, i, idsCategories));
+    const recurrentes = (Array.isArray(objet.recurrentes) ? objet.recurrentes : []).map((r, i) => nettoyerRecurrente(r, i, typesCategories));
     verifierIdsUniques(recurrentes, 'transactions mensuelles');
     // Un lien vers un modèle mensuel absent du fichier est simplement retiré
     const idsRecurrentes = new Set(recurrentes.map((r) => r.id));
@@ -151,11 +169,16 @@ export function validerImport(objet) {
     // Budgets : on ne garde que les plafonds valides de catégories de dépense existantes
     const budgets = {};
     for (const [id, plafond] of Object.entries(objet.budgets ?? {})) {
-      if (idsCategories.has(id) && estMontant(plafond)) budgets[id] = plafond;
+      if (typesCategories.get(id) === 'depense' && estMontant(plafond)) budgets[id] = plafond;
     }
     const budgetGlobal = estMontant(objet.budgetGlobal) ? objet.budgetGlobal : null;
+    // Objectifs : uniquement pour des comptes d'épargne existants
+    const objectifs = {};
+    for (const [id, objectif] of Object.entries(objet.objectifs ?? {})) {
+      if (typesCategories.get(id) === 'epargne' && estMontant(objectif)) objectifs[id] = objectif;
+    }
 
-    return { ok: true, donnees: { categories, transactions, recurrentes, budgets, budgetGlobal } };
+    return { ok: true, donnees: { categories, transactions, recurrentes, budgets, budgetGlobal, objectifs } };
   } catch (erreur) {
     if (erreur instanceof ErreurImport) return { ok: false, erreur: erreur.message };
     throw erreur;

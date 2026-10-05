@@ -10,11 +10,12 @@ import * as store from './store.js';
 import { aujourdhui, moisDe, decalerMois, nomDuMois, libelleJour } from './dates.js';
 import {
   genererOccurrences, transactionsDuMois, calculerTotaux, calculerTotalParCategorie, compterUtilisations, choisirCouleur,
+  calculerSoldesEpargne,
 } from './calculs.js';
 import { formaterMontant, formaterMontantSigne } from './money.js';
 import { afficherToast, informer, demanderConfirmation, fermerFeuille } from './ui.js';
-import { ouvrirFormulaireTransaction, ouvrirFormulairePlafond, ouvrirFormulaireCategorie } from './formulaire.js';
-import { rendreAccueil, rendreHistorique, rendreBudgets, rendreReglages } from './ecrans.js';
+import { ouvrirFormulaireTransaction, ouvrirFormulaireMontantCible, ouvrirFormulaireCategorie } from './formulaire.js';
+import { rendreAccueil, rendreHistorique, rendreEpargne, rendreBudgets, rendreReglages } from './ecrans.js';
 import { genererJSON, genererCSV, telecharger, nomFichier, validerImport } from './io.js';
 
 // État de l'interface (les données elles-mêmes viennent toujours de store.js)
@@ -60,6 +61,7 @@ function rendreEnTete() {
 const RENDUS = {
   accueil: rendreAccueil,
   historique: rendreHistorique,
+  epargne: rendreEpargne,
   budgets: rendreBudgets,
   reglages: rendreReglages,
 };
@@ -103,6 +105,34 @@ function modeleDepuis(valeurs) {
 
 /* ===================== Transactions ===================== */
 
+// Messages affichés après un ajout ou une suppression, selon le type
+const MESSAGES = {
+  depense: { ajout: 'Dépense ajoutée', suppression: 'Dépense supprimée', titre: 'Supprimer cette dépense ?' },
+  revenu: { ajout: 'Revenu ajouté', suppression: 'Revenu supprimé', titre: 'Supprimer ce revenu ?' },
+  epargne: { ajout: 'Argent mis de côté', suppression: 'Versement supprimé', titre: 'Supprimer ce versement d’épargne ?' },
+  retrait: { ajout: 'Retrait enregistré', suppression: 'Retrait supprimé', titre: 'Supprimer ce retrait d’épargne ?' },
+};
+
+// Pour un retrait, vérifie que le compte contient assez d'argent ; renvoie un message d'erreur ou null
+// (idExclu : en modification, on ne compte pas l'ancienne version de la transaction)
+function verifierRetrait(valeurs, idExclu = null) {
+  if (valeurs.type !== 'retrait') return null;
+  const disponible = calculerSoldesEpargne(etat.donnees.transactions, '9999-12-31', idExclu).get(valeurs.categorieId) ?? 0;
+  if (valeurs.montant <= disponible) return null;
+  const compte = etat.donnees.categories.find((c) => c.id === valeurs.categorieId);
+  return `Il n’y a que ${formaterMontant(Math.max(disponible, 0))} sur « ${compte.nom} ». Tu ne peux pas retirer plus.`;
+}
+
+// Valide un formulaire de transaction : contrôle du retrait, puis enregistrement
+async function validerTransaction(valeurs, idExclu, enregistrer) {
+  const probleme = verifierRetrait(valeurs, idExclu);
+  if (probleme) {
+    await informer('Solde insuffisant', probleme);
+    return false; // la feuille reste ouverte pour corriger le montant
+  }
+  return executer(enregistrer);
+}
+
 // Enregistre une nouvelle transaction (et son modèle mensuel si « Chaque mois » est coché)
 async function ajouterTransaction(valeurs) {
   const { chaqueMois, ...champs } = valeurs;
@@ -116,13 +146,14 @@ async function ajouterTransaction(valeurs) {
   if (chaqueMois) await appliquerRecurrences();
 }
 
-// Ouvre le formulaire d'ajout (bouton « + »)
-function ouvrirAjout() {
+// Ouvre le formulaire d'ajout (bouton « + », ou boutons de l'écran Épargne)
+function ouvrirAjout(typeParDefaut = 'depense') {
   ouvrirFormulaireTransaction({
     categories: etat.donnees.categories,
-    surValider: (valeurs) => executer(async () => {
+    typeParDefaut,
+    surValider: (valeurs) => validerTransaction(valeurs, null, async () => {
       await ajouterTransaction(valeurs);
-      const libelle = valeurs.type === 'revenu' ? 'Revenu ajouté' : 'Dépense ajoutée';
+      const libelle = MESSAGES[valeurs.type].ajout;
       const autreMois = moisDe(valeurs.date) !== etat.mois;
       afficherToast(autreMois ? `${libelle} en ${nomDuMois(moisDe(valeurs.date)).toLowerCase()}` : libelle);
       await rafraichir();
@@ -152,9 +183,8 @@ async function enregistrerModification(transaction, modele, valeurs) {
 // Demande confirmation puis supprime une transaction
 async function confirmerSuppression(transaction) {
   const categorie = etat.donnees.categories.find((c) => c.id === transaction.categorieId);
-  const estDepense = transaction.type === 'depense';
   const ok = await demanderConfirmation({
-    titre: estDepense ? 'Supprimer cette dépense ?' : 'Supprimer ce revenu ?',
+    titre: MESSAGES[transaction.type].titre,
     message: `${categorie?.nom ?? 'Transaction'} · ${formaterMontant(transaction.montant)} · ${libelleJour(transaction.date).toLowerCase()}. Cette action est définitive.`,
     libelleValider: 'Supprimer',
     danger: true,
@@ -163,7 +193,7 @@ async function confirmerSuppression(transaction) {
   const reussi = await executer(() => store.supprimerTransaction(transaction.id));
   if (!reussi) return;
   fermerFeuille();
-  afficherToast(estDepense ? 'Dépense supprimée' : 'Revenu supprimé');
+  afficherToast(MESSAGES[transaction.type].suppression);
   await rafraichir();
 }
 
@@ -174,7 +204,7 @@ function ouvrirModification(transaction) {
     categories: etat.donnees.categories,
     transaction,
     estRecurrente: modele !== null,
-    surValider: (valeurs) => executer(async () => {
+    surValider: (valeurs) => validerTransaction(valeurs, transaction.id, async () => {
       await enregistrerModification(transaction, modele, valeurs);
       afficherToast('Transaction modifiée');
       await rafraichir();
@@ -200,12 +230,36 @@ function ouvrirBudget(categorieId) {
     afficherToast(message);
     await rafraichir();
   });
-  ouvrirFormulairePlafond({
+  ouvrirFormulaireMontantCible({
     titre: global ? 'Budget global du mois' : `Budget ${categorie.emoji} ${categorie.nom}`,
-    plafond: global ? etat.donnees.budgetGlobal : (etat.donnees.budgets[categorieId] ?? null),
-    depense,
+    valeur: global ? etat.donnees.budgetGlobal : (etat.donnees.budgets[categorieId] ?? null),
+    libelleChamp: 'Plafond mensuel',
+    aide: `Dépensé ce mois-ci : ${formaterMontant(depense)}. Ce plafond s'applique à tous les mois.`,
+    libelleRetirer: 'Retirer le plafond',
     surValider: (plafond) => enregistrer(plafond, 'Budget enregistré'),
     surRetirer: () => enregistrer(null, 'Plafond retiré'),
+  });
+}
+
+/* ===================== Épargne ===================== */
+
+// Ouvre la saisie de l'objectif d'un compte d'épargne
+function ouvrirObjectif(compteId) {
+  const compte = etat.donnees.categories.find((c) => c.id === compteId);
+  const solde = calculerSoldesEpargne(etat.donnees.transactions).get(compteId) ?? 0;
+  const enregistrer = (objectif, message) => executer(async () => {
+    await store.definirObjectif(compteId, objectif);
+    afficherToast(message);
+    await rafraichir();
+  });
+  ouvrirFormulaireMontantCible({
+    titre: `Objectif ${compte.emoji} ${compte.nom}`,
+    valeur: etat.donnees.objectifs[compteId] ?? null,
+    libelleChamp: 'Montant à atteindre',
+    aide: `Déjà sur ce compte : ${formaterMontant(solde)}.`,
+    libelleRetirer: 'Retirer l’objectif',
+    surValider: (objectif) => enregistrer(objectif, 'Objectif enregistré'),
+    surRetirer: () => enregistrer(null, 'Objectif retiré'),
   });
 }
 
@@ -221,7 +275,7 @@ function ouvrirAjoutCategorie(type) {
     surValider: (valeurs) => executer(async () => {
       const couleur = choisirCouleur(etat.donnees.categories, valeurs.type);
       await store.ajouterCategorie({ ...valeurs, couleur });
-      afficherToast('Catégorie ajoutée');
+      afficherToast(valeurs.type === 'epargne' ? 'Compte ajouté' : 'Catégorie ajoutée');
       await rafraichir();
     }),
   });
@@ -240,7 +294,8 @@ async function supprimerCategorie(categorie) {
   }
   const memeType = etat.donnees.categories.filter((c) => c.type === categorie.type);
   if (memeType.length === 1) {
-    await informer('Dernière catégorie', `Il faut garder au moins une catégorie de ${categorie.type === 'depense' ? 'dépenses' : 'revenus'}.`);
+    const quoi = { depense: 'une catégorie de dépenses', revenu: 'une catégorie de revenus', epargne: 'un compte d’épargne' }[categorie.type];
+    await informer('Impossible de supprimer', `Il faut garder au moins ${quoi}.`);
     return;
   }
   const ok = await demanderConfirmation({
@@ -360,6 +415,8 @@ async function toutEffacer() {
 const actions = {
   modifierTransaction: ouvrirModification,
   modifierBudget: ouvrirBudget,
+  ajouterEpargne: ouvrirAjout,
+  modifierObjectif: ouvrirObjectif,
   ajouterCategorie: ouvrirAjoutCategorie,
   supprimerCategorie,
   arreterRecurrente,
@@ -398,7 +455,8 @@ function brancherEvenements() {
   document.getElementById('mois-precedent').addEventListener('click', () => changerMois(-1));
   document.getElementById('mois-suivant').addEventListener('click', () => changerMois(1));
   document.getElementById('mois-actuel').addEventListener('click', () => changerMois(0));
-  document.getElementById('bouton-ajouter').addEventListener('click', ouvrirAjout);
+  // Sur l'écran Épargne, le « + » propose directement de mettre de l'argent de côté
+  document.getElementById('bouton-ajouter').addEventListener('click', () => ouvrirAjout(etat.ecran === 'epargne' ? 'epargne' : 'depense'));
 }
 
 /* ===================== Démarrage ===================== */

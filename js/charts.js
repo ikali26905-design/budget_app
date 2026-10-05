@@ -52,6 +52,11 @@ export function creerGraphiqueBarres(lignes, titreAccessible) {
   return creer('ul', { class: 'graphique', 'aria-label': titreAccessible }, elements);
 }
 
+// Barre de progression simple (ex. objectif d'épargne) : proportion de 0 à 1, couleur CSS
+export function creerBarreProgression(proportion, couleur, libelleAccessible) {
+  return dessinerBarre(proportion, couleur, libelleAccessible);
+}
+
 // Couleur et libellé associés à chaque niveau de budget (la couleur n'est jamais seule)
 const NIVEAUX = {
   ok: { couleur: 'var(--etat-ok)', symbole: '✓', libelle: 'Dans le budget' },

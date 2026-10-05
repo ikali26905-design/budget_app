@@ -5,7 +5,14 @@
 // à une vraie base de données (forcément asynchrones), le reste de l'app ne change pas.
 
 const CLE_STOCKAGE = 'budget-app:donnees';
-export const VERSION_DONNEES = 1;
+export const VERSION_DONNEES = 2; // 2 = ajout de l'épargne (comptes + objectifs)
+
+// Comptes d'épargne créés au premier lancement (et ajoutés aux données d'avant la version 2)
+const COMPTES_EPARGNE_PAR_DEFAUT = [
+  { id: 'livret-a', nom: 'Livret A', emoji: '🏦', type: 'epargne', couleur: 1 },
+  { id: 'projets', nom: 'Projets', emoji: '✈️', type: 'epargne', couleur: 2 },
+  { id: 'imprevus', nom: 'Imprévus', emoji: '🛟', type: 'epargne', couleur: 3 },
+];
 
 // Catégories créées au premier lancement. « couleur » = numéro de teinte (1 à 8), voir style.css
 const CATEGORIES_PAR_DEFAUT = [
@@ -22,6 +29,7 @@ const CATEGORIES_PAR_DEFAUT = [
   { id: 'aides', nom: 'Aides (APL, CAF)', emoji: '🏛️', type: 'revenu', couleur: 3 },
   { id: 'famille', nom: 'Famille', emoji: '👪', type: 'revenu', couleur: 4 },
   { id: 'autre-revenu', nom: 'Autre revenu', emoji: '💰', type: 'revenu', couleur: 5 },
+  ...COMPTES_EPARGNE_PAR_DEFAUT,
 ];
 
 // Copie en mémoire des données, pour ne pas relire localStorage à chaque appel
@@ -36,6 +44,7 @@ function creerDonneesInitiales() {
     recurrentes: [],
     budgets: {},
     budgetGlobal: null,
+    objectifs: {}, // objectif de chaque compte d'épargne, en centimes
   };
 }
 
@@ -50,10 +59,17 @@ function copier(objet) {
   return structuredClone(objet);
 }
 
-// Met à niveau des données d'une ancienne version (point d'entrée pour les évolutions futures)
+// Met à niveau des données d'une ancienne version (ou d'un import) vers la version actuelle
 function migrer(donnees) {
-  // Version 1 = version actuelle : on complète seulement les champs éventuellement absents
-  return { ...creerDonneesInitiales(), ...donnees, version: VERSION_DONNEES };
+  // Les champs absents (ex. « objectifs » avant la version 2) prennent leur valeur par défaut
+  const resultat = { ...creerDonneesInitiales(), ...donnees, version: VERSION_DONNEES };
+  // Avant la version 2, il n'y avait pas d'épargne : on ajoute les comptes par défaut
+  if (!resultat.categories.some((c) => c.type === 'epargne')) {
+    const idsPris = new Set(resultat.categories.map((c) => c.id));
+    const comptes = COMPTES_EPARGNE_PAR_DEFAUT.map((c) => ({ ...c, id: idsPris.has(c.id) ? creerId() : c.id }));
+    resultat.categories = [...resultat.categories, ...comptes];
+  }
+  return resultat;
 }
 
 // Lit les données depuis localStorage (ou crée les données initiales)
@@ -198,12 +214,13 @@ export async function ajouterCategorie(champs) {
   });
 }
 
-// Supprime une catégorie et son éventuel plafond (la vérification d'usage est faite avant, dans app.js)
+// Supprime une catégorie, son éventuel plafond ou objectif (la vérification d'usage est faite avant, dans app.js)
 export async function supprimerCategorie(id) {
   return modifier((d) => {
     trouver(d.categories, id);
     d.categories = d.categories.filter((c) => c.id !== id);
     delete d.budgets[id];
+    delete d.objectifs[id];
   });
 }
 
@@ -221,6 +238,14 @@ export async function definirBudget(categorieId, plafond) {
 export async function definirBudgetGlobal(plafond) {
   return modifier((d) => {
     d.budgetGlobal = plafond;
+  });
+}
+
+// Définit l'objectif d'un compte d'épargne (en centimes), ou le retire si null
+export async function definirObjectif(compteId, objectif) {
+  return modifier((d) => {
+    if (objectif === null) delete d.objectifs[compteId];
+    else d.objectifs[compteId] = objectif;
   });
 }
 

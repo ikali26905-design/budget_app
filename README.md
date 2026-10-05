@@ -3,9 +3,10 @@
 Application web de suivi de budget personnel, pensée pour le téléphone et pour une utilisation à une main.
 En quelques secondes, tu sais où va ton argent ce mois-ci et s'il te reste de la marge.
 
-- **Accueil** : solde du mois (en grand), revenus, dépenses, budget global, répartition des dépenses par catégorie, solde cumulé.
+- **Accueil** : solde du mois en grand (revenus − dépenses − épargne), revenus, dépenses et épargne du mois, budget global, répartition des dépenses par catégorie, solde cumulé.
 - **Ajout rapide** : « + » → montant (clavier numérique) → catégorie → valider. La date du jour est déjà remplie.
 - **Historique** : transactions du mois groupées par jour, filtre par catégorie, modification, suppression avec confirmation.
+- **Épargne** : tu mets de l'argent de côté sur des comptes (Livret A, Projets, Imprévus… personnalisables) ou tu en retires. L'écran affiche le total épargné, le solde de chaque compte et un objectif facultatif avec sa barre de progression.
 - **Budgets** : plafond mensuel par catégorie et budget global. La barre est verte, devient orange à 80 % et rouge à 100 %.
 - **Transactions mensuelles** : la case « Chaque mois » répète automatiquement une transaction (loyer, bourse, abonnement…).
 - **Réglages** : catégories personnalisées, export JSON/CSV, import JSON.
@@ -97,8 +98,8 @@ budget_app/
 │   ├── calculs.js      Calculs purs : totaux, soldes, état des budgets, récurrences
 │   ├── charts.js       Graphiques SVG : barres de répartition et jauges de budget
 │   ├── ui.js           Briques d'interface : création d'éléments, feuille, confirmation, toast
-│   ├── ecrans.js       Rendu des 4 écrans
-│   ├── formulaire.js   Feuilles de saisie : transaction, plafond, catégorie
+│   ├── ecrans.js       Rendu des 5 écrans
+│   ├── formulaire.js   Feuilles de saisie : transaction, plafond/objectif, catégorie
 │   └── io.js           Export JSON/CSV, validation de l'import JSON
 └── tests/
     └── calculs.test.js Tests unitaires des fonctions pures
@@ -134,14 +135,15 @@ Toutes les données sont enregistrées sous **une seule clé** `localStorage` : 
 
 ```jsonc
 {
-  "version": 1,                       // pour migrer les données si le format évolue
+  "version": 2,                       // pour migrer les données si le format évolue
   "categories": [
-    { "id": "courses", "nom": "Courses", "emoji": "🛒", "type": "depense", "couleur": 2 }
-  ],
+    { "id": "courses", "nom": "Courses", "emoji": "🛒", "type": "depense", "couleur": 2 },
+    { "id": "livret-a", "nom": "Livret A", "emoji": "🏦", "type": "epargne", "couleur": 1 }
+  ],                                  // type : "depense", "revenu" ou "epargne" (compte d'épargne)
   "transactions": [
     {
       "id": "2f1c…",                  // identifiant unique (crypto.randomUUID)
-      "type": "depense",              // "depense" ou "revenu"
+      "type": "depense",              // "depense", "revenu", "epargne" (mettre de côté) ou "retrait"
       "montant": 1890,                // EN CENTIMES, entier positif → 18,90 €
       "categorieId": "courses",
       "date": "2026-10-05",           // AAAA-MM-JJ
@@ -159,7 +161,8 @@ Toutes les données sont enregistrées sous **une seule clé** `localStorage` : 
     }
   ],
   "budgets": { "courses": 25000 },    // plafond mensuel par catégorie, en centimes
-  "budgetGlobal": 90000               // plafond pour toutes les dépenses du mois (ou null)
+  "budgetGlobal": 90000,              // plafond pour toutes les dépenses du mois (ou null)
+  "objectifs": { "livret-a": 100000 } // objectif de chaque compte d'épargne, en centimes
 }
 ```
 
@@ -168,6 +171,8 @@ Toutes les données sont enregistrées sous **une seule clé** `localStorage` : 
 - **Montants en centimes (entiers).** En JavaScript, `0.1 + 0.2` vaut `0.30000000000000004`. Avec des entiers, aucun arrondi ne fausse les totaux. La saisie « 12,5 » est analysée comme du **texte** (`"12"` et `"5"` → 1250 centimes), sans jamais passer par un nombre à virgule. On ne divise par 100 qu'au moment d'afficher.
 - **Montants toujours positifs.** C'est le champ `type` qui indique le sens, ce qui évite les erreurs de signe.
 - **Dates en texte `AAAA-MM-JJ`.** Pas de problème de fuseau horaire, et l'ordre alphabétique correspond à l'ordre chronologique.
+- **L'épargne.** Un versement (`epargne`) fait sortir l'argent du budget du mois, un retrait (`retrait`) l'y fait revenir. Le solde du mois vaut donc revenus − dépenses − (versements − retraits). Le solde d'un compte d'épargne est la somme de ses versements moins ses retraits, et il est **recalculé**, jamais stocké. On ne peut pas retirer plus que ce que contient le compte.
+- **Migration.** Les données enregistrées avant l'ajout de l'épargne (version 1) sont mises à niveau automatiquement à l'ouverture : la fonction `migrer()` de `store.js` ajoute les comptes d'épargne par défaut et le champ `objectifs`. Un ancien fichier de sauvegarde reste importable.
 - **Rien n'est stocké en double.** Les totaux, le solde cumulé et l'état des budgets sont **recalculés** à chaque affichage, donc ils ne peuvent jamais être faux.
 - **Transactions mensuelles.** À l'ouverture de l'app (et quand on y revient), `genererOccurrences()` crée les transactions manquantes jusqu'à aujourd'hui, puis met à jour `dernierMois`. Supprimer une occurrence ne la fait donc pas réapparaître.
 - **Suppression d'une catégorie.** Elle est impossible tant qu'une transaction ou une transaction mensuelle l'utilise. L'app affiche combien d'éléments la bloquent.

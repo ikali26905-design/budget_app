@@ -1,4 +1,4 @@
-// Rendu des 4 écrans (Accueil, Historique, Budgets, Réglages).
+// Rendu des 5 écrans (Accueil, Historique, Épargne, Budgets, Réglages).
 // Chaque fonction « rendreXxx » reçoit le conteneur de l'écran et un contexte :
 //   { donnees, mois, filtre, actions }
 // Elle redessine entièrement l'écran à partir des données (aucun état caché dans le DOM).
@@ -6,12 +6,13 @@
 
 import { creer, remplir, etatVide, badgeCategorie, icone } from './ui.js';
 import { formaterMontant, formaterMontantCourt, formaterMontantSigne } from './money.js';
-import { nomDuMoisSeul, deMois, libelleJour } from './dates.js';
+import { nomDuMoisSeul, deMois, libelleJour, finDuMois } from './dates.js';
 import {
   transactionsDuMois, calculerTotaux, calculerSoldeCumule, calculerTotalParCategorie,
   calculerEtatBudget, pourcentage, grouperParJour, categoriesUtilisees, compterUtilisations,
+  calculerSoldesEpargne, estEpargne,
 } from './calculs.js';
-import { creerGraphiqueBarres, creerJauge, infosNiveau } from './charts.js';
+import { creerGraphiqueBarres, creerJauge, infosNiveau, creerBarreProgression } from './charts.js';
 
 /* ===================== Outils communs ===================== */
 
@@ -61,32 +62,34 @@ export function creerBlocJauge(titre, etat) {
 // Carte principale : le solde du mois, en très grand
 function carteSolde(totaux, mois) {
   const positif = totaux.solde >= 0;
-  const message = positif
-    ? (totaux.solde > 0 ? 'Il te reste de la marge 👍' : "Tu es à l'équilibre")
-    : 'Tu dépenses plus que tu ne gagnes ce mois-ci';
+  let message = 'Tu dépenses plus que tu ne gagnes ce mois-ci';
+  if (positif) message = totaux.solde > 0 ? 'Il te reste de la marge 👍' : 'Tu es à l’équilibre';
+  if (!positif && totaux.epargne > 0 && totaux.solde + totaux.epargne >= 0) message = 'Tu as mis de côté plus que ta marge du mois';
   return creer('div', { class: 'carte carte-solde' },
     creer('p', { class: 'carte-solde__label' }, `Solde ${deMois(mois)}`),
     creer('p', { class: `carte-solde__montant montant ${positif ? '' : 'carte-solde__montant--negatif'}` },
       (positif && totaux.solde > 0 ? '+' : '') + formaterMontant(totaux.solde)),
     creer('p', { class: 'carte-solde__message' }, message),
+    creer('p', { class: 'aide' }, 'Revenus − dépenses − épargne'),
   );
 }
 
-// Deux tuiles côte à côte : total des revenus et total des dépenses
+// Trois tuiles côte à côte : revenus, dépenses et épargne nette du mois
 function tuilesTotaux(totaux) {
   const tuile = (libelle, montant, classe, symbole) => creer('div', { class: `tuile ${classe}` },
     creer('p', { class: 'tuile__label' }, creer('span', { 'aria-hidden': 'true' }, symbole), ` ${libelle}`),
     creer('p', { class: 'tuile__montant montant' }, formaterMontant(montant)));
   return creer('div', { class: 'tuiles' },
     tuile('Revenus', totaux.revenus, 'tuile--revenus', '↑'),
-    tuile('Dépenses', totaux.depenses, 'tuile--depenses', '↓'));
+    tuile('Dépenses', totaux.depenses, 'tuile--depenses', '↓'),
+    tuile('Épargne', totaux.epargne, 'tuile--epargne', '⇢'));
 }
 
 // Ligne discrète : solde cumulé depuis la première transaction jusqu'à la fin du mois
 function ligneSoldeCumule(cumul, mois) {
   return creer('div', { class: 'carte ligne-info' },
     creer('span', {}, 'Solde cumulé', creer('br'),
-      creer('span', { class: 'aide' }, `tous les mois jusqu'à fin ${nomDuMoisSeul(mois)}`)),
+      creer('span', { class: 'aide' }, `jusqu’à fin ${nomDuMoisSeul(mois)}, épargne déduite`)),
     creer('strong', { class: `montant ${cumul < 0 ? 'montant--negatif' : ''}` }, formaterMontant(cumul)),
   );
 }
@@ -163,12 +166,24 @@ function barreFiltres(categories, filtre, actions) {
 
 // Résumé affiché quand un filtre est actif : « 171,50 € · 3 transactions »
 function resumeFiltre(transactions, categorie) {
-  const total = transactions.reduce((s, t) => s + t.montant, 0);
+  // Pour un compte d'épargne, les retraits viennent en déduction des versements
+  const total = transactions.reduce((s, t) => s + (t.type === 'retrait' ? -t.montant : t.montant), 0);
   const nb = transactions.length;
   return creer('p', { class: 'resume-filtre' },
     creer('strong', {}, categorie.nom), ' : ',
     creer('span', { class: 'montant' }, formaterMontant(total)),
     ` · ${nb} transaction${nb > 1 ? 's' : ''}`);
+}
+
+// Couleur du montant selon le type (l'épargne reste neutre : ce n'est ni un gain ni une perte)
+const CLASSES_MONTANT = { depense: '', revenu: 'montant--revenu', epargne: 'montant--epargne', retrait: 'montant--epargne' };
+
+// Texte secondaire d'une ligne : la note, ou à défaut la nature du mouvement d'épargne
+function noteTransaction(transaction) {
+  if (transaction.note) return transaction.note;
+  if (transaction.type === 'epargne') return 'Mis de côté';
+  if (transaction.type === 'retrait') return 'Retiré de l’épargne';
+  return '';
 }
 
 // Une ligne de transaction cliquable (ouvre la modification)
@@ -186,8 +201,8 @@ function ligneTransaction(transaction, categorie, actions) {
         recurrente && creer('span', { class: 'ligne-transaction__recurrente', title: 'Chaque mois' },
           icone('M17 2l4 4-4 4', 'M3 11V9a3 3 0 0 1 3-3h15', 'M7 22l-4-4 4-4', 'M21 13v2a3 3 0 0 1-3 3H3'),
           creer('span', { class: 'visuellement-cache' }, ' (chaque mois)'))),
-      transaction.note && creer('span', { class: 'ligne-transaction__note' }, transaction.note)),
-    creer('span', { class: `ligne-transaction__montant montant ${transaction.type === 'revenu' ? 'montant--revenu' : ''}` },
+      noteTransaction(transaction) && creer('span', { class: 'ligne-transaction__note' }, noteTransaction(transaction))),
+    creer('span', { class: `ligne-transaction__montant montant ${CLASSES_MONTANT[transaction.type]}` },
       formaterMontantSigne(transaction.montant, transaction.type)),
     ));
 }
@@ -312,7 +327,7 @@ function sectionCategories(titre, type, donnees, actions) {
           icone(...TRACES_CORBEILLE))))),
       creer('div', { class: 'pied-liste' },
         creer('button', { type: 'button', class: 'bouton bouton--secondaire bouton--plein', onclick: () => actions.ajouterCategorie(type) },
-          '+ Ajouter une catégorie'))),
+          type === 'epargne' ? '+ Ajouter un compte' : '+ Ajouter une catégorie'))),
   ];
 }
 
@@ -357,8 +372,67 @@ export function rendreReglages(conteneur, { donnees, actions }) {
   remplir(conteneur,
     sectionCategories('Catégories de dépenses', 'depense', donnees, actions),
     sectionCategories('Catégories de revenus', 'revenu', donnees, actions),
+    sectionCategories('Comptes d’épargne', 'epargne', donnees, actions),
     sectionRecurrentes(donnees, actions),
     sectionSauvegarde(actions),
     creer('p', { class: 'aide a-propos' }, 'Mon Budget · version 1.0', creer('br'), 'Aucun compte, aucun serveur : tout reste sur ton téléphone.'),
+  );
+}
+
+/* ===================== Épargne ===================== */
+
+// Carte principale : total épargné (tous comptes) et mouvement net du mois
+function carteTotalEpargne(total, netDuMois, mois, actions) {
+  let resume = `Rien mis de côté en ${nomDuMoisSeul(mois)}`;
+  if (netDuMois > 0) resume = `+${formaterMontant(netDuMois)} mis de côté ce mois-ci`;
+  if (netDuMois < 0) resume = `${formaterMontant(-netDuMois)} retirés ce mois-ci`;
+  return creer('div', { class: 'carte carte-solde' },
+    creer('p', { class: 'carte-solde__label' }, `Épargne totale fin ${nomDuMoisSeul(mois)}`),
+    creer('p', { class: 'carte-solde__montant montant' }, formaterMontant(total)),
+    creer('p', { class: 'carte-solde__message' }, resume),
+    creer('div', { class: 'actions-ligne' },
+      creer('button', { type: 'button', class: 'bouton', onclick: () => actions.ajouterEpargne('epargne') }, 'Mettre de côté'),
+      creer('button', { type: 'button', class: 'bouton bouton--secondaire', onclick: () => actions.ajouterEpargne('retrait') }, 'Retirer')),
+  );
+}
+
+// Bloc objectif d'un compte : barre de progression + « 32 % · reste 680 € » (ou invitation)
+function blocObjectif(solde, objectif, couleur, nom) {
+  if (!objectif) return creer('span', { class: 'lien-action' }, 'Définir un objectif');
+  const atteint = solde >= objectif;
+  const pourcent = pourcentage(Math.max(solde, 0), objectif);
+  return creer('span', { class: 'objectif' },
+    creerBarreProgression(Math.max(solde, 0) / objectif, couleur, `${nom} : ${pourcent} % de l’objectif`),
+    creer('span', { class: 'objectif__pied' },
+      creer('span', {}, `${pourcent} % de ${formaterMontantCourt(objectif)}`),
+      creer('span', { class: 'montant' }, atteint ? 'Objectif atteint 🎉' : `Reste ${formaterMontantCourt(objectif - solde)}`)));
+}
+
+// Ligne d'un compte d'épargne cliquable (ouvre la saisie de l'objectif)
+function ligneCompte(compte, solde, objectif, actions) {
+  return creer('li', {},
+    creer('button', { type: 'button', class: 'ligne-compte', onclick: () => actions.modifierObjectif(compte.id) },
+      creer('span', { class: 'ligne-compte__haut' },
+        badgeCategorie(compte),
+        creer('span', { class: 'ligne-transaction__nom' }, compte.nom),
+        creer('strong', { class: 'montant' }, formaterMontant(solde))),
+      blocObjectif(solde, objectif, `var(--serie-${compte.couleur})`, compte.nom)));
+}
+
+// Écran Épargne : total, boutons rapides, puis chaque compte avec son objectif
+export function rendreEpargne(conteneur, { donnees, mois, actions }) {
+  const soldes = calculerSoldesEpargne(donnees.transactions, finDuMois(mois));
+  const comptes = donnees.categories.filter((c) => c.type === 'epargne');
+  const total = comptes.reduce((s, c) => s + (soldes.get(c.id) ?? 0), 0);
+  const netDuMois = calculerTotaux(transactionsDuMois(donnees.transactions, mois)).epargne;
+  const aucunMouvement = !donnees.transactions.some((t) => estEpargne(t.type));
+  remplir(conteneur,
+    carteTotalEpargne(total, netDuMois, mois, actions),
+    aucunMouvement && creer('p', { class: 'aide aide--centre' },
+      'Mets de l’argent de côté pour un projet ou les imprévus : il est déduit de ton solde du mois et s’accumule ici.'),
+    creer('h2', { class: 'titre-section' }, 'Mes comptes'),
+    creer('ul', { class: 'liste carte carte--liste' },
+      comptes.map((c) => ligneCompte(c, soldes.get(c.id) ?? 0, donnees.objectifs[c.id], actions))),
+    creer('p', { class: 'aide aide--centre' }, 'Touche un compte pour définir son objectif. Ajoute ou supprime des comptes dans Réglages.'),
   );
 }

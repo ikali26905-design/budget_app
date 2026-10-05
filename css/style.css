@@ -304,7 +304,7 @@ svg {
   max-width: var(--largeur-max);
   margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   height: calc(var(--hauteur-onglets) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--surface);
@@ -482,7 +482,9 @@ svg {
 /* Sélecteur à deux options (Dépense / Revenu) */
 .segment {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* autant de colonnes égales que d'options (2 ou 3) */
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   gap: 4px;
   padding: 4px;
   border-radius: 999px;
@@ -510,6 +512,13 @@ svg {
   background: var(--accent-doux);
   color: var(--accent-actif);
   box-shadow: inset 0 0 0 2px var(--accent-actif);
+}
+
+/* Second sélecteur (Mettre de côté / Retirer) : plus discret, sous le premier */
+.segment--secondaire {
+  margin-top: -8px;
+  background: transparent;
+  border: 1px solid var(--bordure);
 }
 
 .segment input:focus-visible + label {
@@ -767,8 +776,8 @@ svg {
 
 .tuiles {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
   margin-bottom: 16px;
 }
 
@@ -776,13 +785,15 @@ svg {
   background: var(--surface);
   border-radius: var(--rayon);
   box-shadow: var(--ombre);
-  padding: 12px 14px;
+  padding: 12px 10px;
+  min-width: 0;
 }
 
 .tuile__label {
   color: var(--texte-2);
-  font-size: 0.875rem;
+  font-size: clamp(0.75rem, 3.4vw, 0.875rem);
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .tuile--revenus .tuile__label span {
@@ -794,8 +805,17 @@ svg {
 }
 
 .tuile__montant {
-  font-size: 1.25rem;
+  /* 3 tuiles côte à côte : la taille s'adapte à la largeur de l'écran */
+  font-size: clamp(0.9375rem, 4.2vw, 1.25rem);
   font-weight: 700;
+}
+
+.tuile--epargne .tuile__label span {
+  color: var(--texte-2);
+}
+
+.montant--epargne {
+  color: var(--texte-2);
 }
 
 .ligne-info {
@@ -1133,7 +1153,59 @@ svg {
   outline: 3px solid var(--accent);
 }
 
-/* ---------- 20. Écrans larges (ordinateur) ---------- */
+/* ---------- 20. Épargne ---------- */
+.actions-ligne {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.actions-ligne .bouton {
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.ligne-compte {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+
+.ligne-compte:active {
+  background: var(--surface-2);
+}
+
+.ligne-compte__haut {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ligne-compte__haut .ligne-transaction__nom {
+  flex: 1;
+  min-width: 0;
+}
+
+.objectif {
+  display: block;
+}
+
+.objectif__pied {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 0.875rem;
+  color: var(--texte-2);
+}
+
+/* ---------- 21. Écrans larges (ordinateur) ---------- */
 @media (min-width: 700px) {
   .contenu {
     padding-top: 16px;
