@@ -1039,7 +1039,94 @@ svg {
   font-weight: 600;
 }
 
-/* ---------- 19. Écrans larges (ordinateur) ---------- */
+/* ---------- 19. Réglages ---------- */
+.ligne-reglage {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 8px 8px 8px 16px;
+}
+
+.ligne-reglage .bouton {
+  min-height: 44px;
+  padding: 0 14px;
+  font-size: 0.875rem;
+}
+
+.ligne-reglage .ligne-transaction__note {
+  white-space: normal; /* ici, on préfère passer à la ligne plutôt que tronquer */
+}
+
+.bouton-icone--danger {
+  color: var(--negatif);
+}
+
+.carte--liste {
+  padding: 0;
+}
+
+.aide--carte {
+  padding: 16px;
+}
+
+.pied-liste {
+  padding: 8px 16px 12px;
+}
+
+.actions-colonne {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.a-propos {
+  text-align: center;
+  margin: 24px 0 8px;
+}
+
+/* Grille d'emojis de la feuille « Nouvelle catégorie » */
+.emojis {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  gap: 6px;
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+}
+
+.emojis legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+
+.emoji input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.emoji label {
+  display: grid;
+  place-items: center;
+  height: 48px;
+  border-radius: var(--rayon-petit);
+  background: var(--surface-2);
+  border: 2px solid transparent;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+.emoji input:checked + label {
+  border-color: var(--accent);
+  background: var(--accent-doux);
+}
+
+.emoji input:focus-visible + label {
+  outline: 3px solid var(--accent);
+}
+
+/* ---------- 20. Écrans larges (ordinateur) ---------- */
 @media (min-width: 700px) {
   .contenu {
     padding-top: 16px;

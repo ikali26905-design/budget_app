@@ -214,3 +214,60 @@ export function ouvrirFormulairePlafond({ titre, plafond, depense, surValider, s
 
   ouvrirFeuille(titre, formulaire);
 }
+
+// Emojis proposés pour une nouvelle catégorie
+const EMOJIS = [
+  '🍔', '☕', '🍕', '🍺', '🛍️', '👕', '💇', '🎁', '🎬', '🎵', '🏋️', '⚽',
+  '✈️', '🚗', '⛽', '🚲', '🐶', '👶', '💡', '📶', '💻', '🧾', '🏦', '💶',
+  '📈', '🤝', '🎨', '🍼', '🌱', '❤️',
+];
+
+/**
+ * Ouvre la feuille « Nouvelle catégorie » : nom, type et emoji (la couleur est choisie automatiquement).
+ * - type : type présélectionné (« depense » ou « revenu »)
+ * - nomExiste(nom, type) : renvoie true si une catégorie du même type porte déjà ce nom
+ * - surValider({ nom, emoji, type }) : fonction async fournie par app.js
+ */
+export function ouvrirFormulaireCategorie({ type, nomExiste, surValider }) {
+  const boutonValider = creer('button', { type: 'submit', class: 'bouton bouton--plein' }, 'Créer la catégorie');
+  const grilleEmojis = creer('fieldset', { class: 'emojis', id: 'emojis' },
+    creer('legend', { class: 'champ__label' }, 'Icône'),
+    EMOJIS.map((emoji, i) => creer('div', { class: 'emoji' },
+      creer('input', { type: 'radio', name: 'emoji', id: `emoji-${i}`, value: emoji, checked: i === 0 }),
+      creer('label', { for: `emoji-${i}` }, emoji))));
+  const formulaire = creer('form', { class: 'formulaire', novalidate: true },
+    creerSelecteurType(type),
+    creer('div', { class: 'champ' },
+      creer('label', { class: 'champ__label', for: 'champ-nom' }, 'Nom'),
+      creer('input', { class: 'champ__input', id: 'champ-nom', name: 'nom', maxlength: 24, autocomplete: 'off', autofocus: true, placeholder: 'Ex. : Restaurants' })),
+    grilleEmojis,
+    creer('p', { class: 'erreur', role: 'alert', hidden: true }),
+    creer('div', { class: 'feuille__actions' }, boutonValider),
+  );
+
+  formulaire.addEventListener('input', () => {
+    formulaire.querySelector('.erreur').hidden = true;
+    formulaire.querySelector('[aria-invalid]')?.removeAttribute('aria-invalid');
+  });
+
+  formulaire.addEventListener('submit', async (evenement) => {
+    evenement.preventDefault();
+    const donnees = new FormData(formulaire);
+    const nom = donnees.get('nom').trim();
+    const typeChoisi = donnees.get('type');
+    if (!nom) {
+      afficherErreur(formulaire, { erreur: 'Donne un nom à la catégorie.', champ: 'champ-nom' });
+      return;
+    }
+    if (nomExiste(nom, typeChoisi)) {
+      afficherErreur(formulaire, { erreur: `La catégorie « ${nom} » existe déjà.`, champ: 'champ-nom' });
+      return;
+    }
+    boutonValider.disabled = true;
+    const reussi = await surValider({ nom, emoji: donnees.get('emoji'), type: typeChoisi });
+    boutonValider.disabled = false;
+    if (reussi !== false) fermerFeuille();
+  });
+
+  ouvrirFeuille('Nouvelle catégorie', formulaire);
+}

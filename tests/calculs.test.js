@@ -74,3 +74,42 @@ test('couleur automatique', () => {
   const cats = [{ type: 'depense', couleur: 1 }, { type: 'depense', couleur: 2 }, { type: 'revenu', couleur: 3 }];
   assert.equal(c.choisirCouleur(cats, 'depense'), 3);
 });
+
+const io = await import(R + 'io.js');
+const donneesIO = {
+  categories: [
+    { id: 'courses', nom: 'Courses', emoji: '🛒', type: 'depense', couleur: 2 },
+    { id: 'job', nom: 'Job', emoji: '💼', type: 'revenu', couleur: 1 },
+  ],
+  transactions: [
+    { id: 'b', type: 'depense', montant: 1890, categorieId: 'courses', date: '2026-10-05', note: 'Lidl; "promo"', recurrenteId: null, creeLe: 2 },
+    { id: 'a', type: 'revenu', montant: 80000, categorieId: 'job', date: '2026-10-01', note: '=SOMME(A1)', recurrenteId: 'r1', creeLe: 1 },
+  ],
+  recurrentes: [{ id: 'r1', type: 'revenu', montant: 80000, categorieId: 'job', jour: 1, note: '', dernierMois: '2026-10' }],
+  budgets: { courses: 25000 },
+  budgetGlobal: null,
+};
+test('export CSV', () => {
+  const lignes = io.genererCSV(donneesIO).split('\r\n');
+  assert.equal(lignes[0], '﻿Date;Type;Catégorie;Montant (€);Note;Mensuelle');
+  assert.equal(lignes[1], "2026-10-01;Revenu;Job;800,00;'=SOMME(A1);oui"); // formule neutralisée
+  assert.equal(lignes[2], '2026-10-05;Dépense;Courses;-18,90;"Lidl; ""promo""";non'); // guillemets échappés
+});
+test('import : export JSON puis réimport identique', () => {
+  const r = io.validerImport(JSON.parse(io.genererJSON(donneesIO)));
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.donnees, donneesIO);
+});
+test('import : fichiers invalides refusés avec un message clair', () => {
+  assert.equal(io.validerImport([]).ok, false);
+  assert.equal(io.validerImport({ foo: 1 }).ok, false);
+  const montantFlottant = structuredClone(donneesIO);
+  montantFlottant.transactions[0].montant = 18.9;
+  assert.match(io.validerImport(montantFlottant).erreur, /montant invalide/);
+  const categorieInconnue = structuredClone(donneesIO);
+  categorieInconnue.transactions[0].categorieId = 'xxx';
+  assert.match(io.validerImport(categorieInconnue).erreur, /catégorie inconnue/);
+  const mauvaiseDate = structuredClone(donneesIO);
+  mauvaiseDate.transactions[0].date = '2026-02-30';
+  assert.match(io.validerImport(mauvaiseDate).erreur, /date invalide/);
+});

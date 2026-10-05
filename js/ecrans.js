@@ -9,7 +9,7 @@ import { formaterMontant, formaterMontantCourt, formaterMontantSigne } from './m
 import { nomDuMoisSeul, deMois, libelleJour } from './dates.js';
 import {
   transactionsDuMois, calculerTotaux, calculerSoldeCumule, calculerTotalParCategorie,
-  calculerEtatBudget, pourcentage, grouperParJour, categoriesUtilisees,
+  calculerEtatBudget, pourcentage, grouperParJour, categoriesUtilisees, compterUtilisations,
 } from './calculs.js';
 import { creerGraphiqueBarres, creerJauge, infosNiveau } from './charts.js';
 
@@ -280,5 +280,85 @@ export function rendreBudgets(conteneur, { donnees, mois, actions }) {
       creer('h2', { class: 'titre-section' }, 'Sans plafond'),
       creer('ul', { class: 'liste carte' }, sansPlafond.map((c) => ligneSansPlafond(c, depensesParCategorie.get(c.id) ?? 0, actions))),
     ],
+  );
+}
+
+/* ===================== Réglages ===================== */
+
+// Icône « corbeille » (tracés SVG)
+const TRACES_CORBEILLE = ['M3 6h18', 'M8 6V4h8v2', 'M19 6l-1 14H6L5 6', 'M10 11v6M14 11v6'];
+
+// Texte d'utilisation d'une catégorie : « 12 transactions » ou « Pas encore utilisée »
+function texteUtilisation(utilisations) {
+  if (utilisations.total === 0) return 'Pas encore utilisée';
+  const morceaux = [];
+  if (utilisations.transactions > 0) morceaux.push(`${utilisations.transactions} transaction${utilisations.transactions > 1 ? 's' : ''}`);
+  if (utilisations.recurrentes > 0) morceaux.push(`${utilisations.recurrentes} mensuelle${utilisations.recurrentes > 1 ? 's' : ''}`);
+  return morceaux.join(' · ');
+}
+
+// Liste des catégories d'un type, avec bouton de suppression et bouton d'ajout
+function sectionCategories(titre, type, donnees, actions) {
+  const categories = donnees.categories.filter((c) => c.type === type);
+  return [
+    creer('h2', { class: 'titre-section' }, titre),
+    creer('div', { class: 'carte carte--liste' },
+      creer('ul', { class: 'liste' }, categories.map((c) => creer('li', { class: 'ligne-reglage' },
+        badgeCategorie(c),
+        creer('span', { class: 'ligne-transaction__texte' },
+          creer('span', { class: 'ligne-transaction__nom' }, c.nom),
+          creer('span', { class: 'ligne-transaction__note' }, texteUtilisation(compterUtilisations(c.id, donnees)))),
+        creer('button', { type: 'button', class: 'bouton-icone bouton-icone--danger', 'aria-label': `Supprimer la catégorie ${c.nom}`, onclick: () => actions.supprimerCategorie(c) },
+          icone(...TRACES_CORBEILLE))))),
+      creer('div', { class: 'pied-liste' },
+        creer('button', { type: 'button', class: 'bouton bouton--secondaire bouton--plein', onclick: () => actions.ajouterCategorie(type) },
+          '+ Ajouter une catégorie'))),
+  ];
+}
+
+// Liste des transactions mensuelles (modèles récurrents) avec bouton « Arrêter »
+function sectionRecurrentes(donnees, actions) {
+  const categorie = indexerCategories(donnees.categories);
+  const contenu = donnees.recurrentes.length === 0
+    ? creer('p', { class: 'aide aide--carte' }, 'Coche « Chaque mois » en ajoutant une transaction (loyer, abonnement, bourse…) pour qu’elle soit ajoutée automatiquement.')
+    : creer('ul', { class: 'liste' }, donnees.recurrentes.map((r) => {
+      const c = categorie(r.categorieId);
+      return creer('li', { class: 'ligne-reglage' },
+        badgeCategorie(c),
+        creer('span', { class: 'ligne-transaction__texte' },
+          creer('span', { class: 'ligne-transaction__nom' }, r.note || c.nom),
+          creer('span', { class: 'ligne-transaction__note' },
+            `${formaterMontantSigne(r.montant, r.type)} · le ${r.jour === 1 ? '1er' : r.jour} du mois`)),
+        creer('button', { type: 'button', class: 'bouton bouton--secondaire', onclick: () => actions.arreterRecurrente(r) }, 'Arrêter'));
+    }));
+  return [
+    creer('h2', { class: 'titre-section' }, 'Transactions mensuelles'),
+    creer('div', { class: 'carte carte--liste' }, contenu),
+  ];
+}
+
+// Boutons d'export, d'import et de remise à zéro
+function sectionSauvegarde(actions) {
+  return [
+    creer('h2', { class: 'titre-section' }, 'Sauvegarde'),
+    creer('div', { class: 'carte' },
+      creer('p', { class: 'aide aide--sous-champ' }, 'Tes données restent uniquement sur cet appareil. Exporte-les de temps en temps pour ne rien perdre.'),
+      creer('div', { class: 'actions-colonne' },
+        creer('button', { type: 'button', class: 'bouton bouton--plein', onclick: actions.exporterJSON }, 'Sauvegarder (JSON)'),
+        creer('button', { type: 'button', class: 'bouton bouton--secondaire bouton--plein', onclick: actions.exporterCSV }, 'Exporter pour Excel (CSV)'),
+        creer('button', { type: 'button', class: 'bouton bouton--secondaire bouton--plein', onclick: actions.importer }, 'Importer une sauvegarde'))),
+    creer('div', { class: 'carte' },
+      creer('button', { type: 'button', class: 'bouton bouton--contour-danger bouton--plein', onclick: actions.toutEffacer }, 'Effacer toutes les données')),
+  ];
+}
+
+// Écran Réglages : catégories, transactions mensuelles, sauvegarde
+export function rendreReglages(conteneur, { donnees, actions }) {
+  remplir(conteneur,
+    sectionCategories('Catégories de dépenses', 'depense', donnees, actions),
+    sectionCategories('Catégories de revenus', 'revenu', donnees, actions),
+    sectionRecurrentes(donnees, actions),
+    sectionSauvegarde(actions),
+    creer('p', { class: 'aide a-propos' }, 'Mon Budget · version 1.0', creer('br'), 'Aucun compte, aucun serveur : tout reste sur ton téléphone.'),
   );
 }

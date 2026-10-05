@@ -8,11 +8,14 @@
 
 import * as store from './store.js';
 import { aujourdhui, moisDe, decalerMois, nomDuMois, libelleJour } from './dates.js';
-import { genererOccurrences, transactionsDuMois, calculerTotaux, calculerTotalParCategorie } from './calculs.js';
-import { formaterMontant } from './money.js';
+import {
+  genererOccurrences, transactionsDuMois, calculerTotaux, calculerTotalParCategorie, compterUtilisations, choisirCouleur,
+} from './calculs.js';
+import { formaterMontant, formaterMontantSigne } from './money.js';
 import { afficherToast, informer, demanderConfirmation, fermerFeuille } from './ui.js';
-import { ouvrirFormulaireTransaction, ouvrirFormulairePlafond } from './formulaire.js';
-import { rendreAccueil, rendreHistorique, rendreBudgets } from './ecrans.js';
+import { ouvrirFormulaireTransaction, ouvrirFormulairePlafond, ouvrirFormulaireCategorie } from './formulaire.js';
+import { rendreAccueil, rendreHistorique, rendreBudgets, rendreReglages } from './ecrans.js';
+import { genererJSON, genererCSV, telecharger, nomFichier, validerImport } from './io.js';
 
 // État de l'interface (les données elles-mêmes viennent toujours de store.js)
 const etat = {
@@ -58,6 +61,7 @@ const RENDUS = {
   accueil: rendreAccueil,
   historique: rendreHistorique,
   budgets: rendreBudgets,
+  reglages: rendreReglages,
 };
 
 // Affiche l'écran courant et met à jour l'onglet actif
@@ -205,12 +209,164 @@ function ouvrirBudget(categorieId) {
   });
 }
 
+/* ===================== Catégories ===================== */
+
+// Ouvre la création d'une catégorie (couleur attribuée automatiquement)
+function ouvrirAjoutCategorie(type) {
+  const nomExiste = (nom, typeChoisi) => etat.donnees.categories
+    .some((c) => c.type === typeChoisi && c.nom.toLocaleLowerCase('fr') === nom.toLocaleLowerCase('fr'));
+  ouvrirFormulaireCategorie({
+    type,
+    nomExiste,
+    surValider: (valeurs) => executer(async () => {
+      const couleur = choisirCouleur(etat.donnees.categories, valeurs.type);
+      await store.ajouterCategorie({ ...valeurs, couleur });
+      afficherToast('Catégorie ajoutée');
+      await rafraichir();
+    }),
+  });
+}
+
+// Supprime une catégorie si elle n'est utilisée nulle part (sinon on explique pourquoi c'est impossible)
+async function supprimerCategorie(categorie) {
+  const utilisations = compterUtilisations(categorie.id, etat.donnees);
+  if (utilisations.total > 0) {
+    const details = [];
+    if (utilisations.transactions > 0) details.push(`${utilisations.transactions} transaction${utilisations.transactions > 1 ? 's' : ''}`);
+    if (utilisations.recurrentes > 0) details.push(`${utilisations.recurrentes} transaction${utilisations.recurrentes > 1 ? 's' : ''} mensuelle${utilisations.recurrentes > 1 ? 's' : ''}`);
+    await informer('Catégorie utilisée',
+      `« ${categorie.nom} » est utilisée par ${details.join(' et ')}. Change leur catégorie ou supprime-les d’abord.`);
+    return;
+  }
+  const memeType = etat.donnees.categories.filter((c) => c.type === categorie.type);
+  if (memeType.length === 1) {
+    await informer('Dernière catégorie', `Il faut garder au moins une catégorie de ${categorie.type === 'depense' ? 'dépenses' : 'revenus'}.`);
+    return;
+  }
+  const ok = await demanderConfirmation({
+    titre: 'Supprimer cette catégorie ?',
+    message: `« ${categorie.nom} » sera retirée de la liste${etat.donnees.budgets[categorie.id] ? ', ainsi que son plafond' : ''}.`,
+    libelleValider: 'Supprimer',
+    danger: true,
+  });
+  if (ok && await executer(() => store.supprimerCategorie(categorie.id))) {
+    afficherToast('Catégorie supprimée');
+    await rafraichir();
+  }
+}
+
+// Arrête une transaction mensuelle (les transactions déjà créées restent)
+async function arreterRecurrente(modele) {
+  const nom = modele.note || etat.donnees.categories.find((c) => c.id === modele.categorieId)?.nom || 'Transaction';
+  const ok = await demanderConfirmation({
+    titre: 'Arrêter cette transaction mensuelle ?',
+    message: `« ${nom} » (${formaterMontantSigne(modele.montant, modele.type)}) ne sera plus ajoutée les mois suivants. Les transactions déjà créées sont conservées.`,
+    libelleValider: 'Arrêter',
+    danger: true,
+  });
+  if (ok && await executer(() => store.supprimerRecurrente(modele.id))) {
+    afficherToast('Répétition arrêtée');
+    await rafraichir();
+  }
+}
+
+/* ===================== Sauvegarde ===================== */
+
+// Télécharge toutes les données au format JSON (sauvegarde complète, réimportable)
+function exporterJSON() {
+  telecharger(nomFichier('json'), genererJSON(etat.donnees), 'application/json');
+  afficherToast('Sauvegarde exportée');
+}
+
+// Télécharge les transactions au format CSV (pour Excel / LibreOffice)
+function exporterCSV() {
+  if (etat.donnees.transactions.length === 0) {
+    informer('Rien à exporter', 'Ajoute au moins une transaction avant d’exporter en CSV.');
+    return;
+  }
+  telecharger(nomFichier('csv'), genererCSV(etat.donnees), 'text/csv;charset=utf-8');
+  afficherToast('Fichier CSV exporté');
+}
+
+// Lit un fichier JSON choisi par l'utilisateur, le valide, puis remplace les données après confirmation
+async function importerFichier(fichier) {
+  let objet;
+  try {
+    objet = JSON.parse(await fichier.text());
+  } catch {
+    await informer('Import impossible', 'Ce fichier n’est pas un fichier JSON valide.');
+    return;
+  }
+  const resultat = validerImport(objet);
+  if (!resultat.ok) {
+    await informer('Import impossible', resultat.erreur);
+    return;
+  }
+  const nb = resultat.donnees.transactions.length;
+  const ok = await demanderConfirmation({
+    titre: 'Remplacer tes données ?',
+    message: `Le fichier contient ${nb} transaction${nb > 1 ? 's' : ''}. Toutes tes données actuelles seront remplacées. Pense à exporter une sauvegarde avant si besoin.`,
+    libelleValider: 'Remplacer',
+    danger: true,
+  });
+  if (!ok) return;
+  const reussi = await executer(async () => {
+    await store.remplacerDonnees(resultat.donnees);
+    await appliquerRecurrences();
+  });
+  if (reussi) {
+    afficherToast('Données importées');
+    await rafraichir();
+  }
+}
+
+// Ouvre le sélecteur de fichier du téléphone pour l'import
+function choisirFichierImport() {
+  const champ = creerChampFichier();
+  champ.value = ''; // permet de réimporter le même fichier deux fois de suite
+  champ.click();
+}
+
+// Crée (une seule fois) le champ <input type="file"> invisible utilisé pour l'import
+function creerChampFichier() {
+  let champ = document.getElementById('champ-import');
+  if (!champ) {
+    champ = Object.assign(document.createElement('input'), { type: 'file', id: 'champ-import', accept: '.json,application/json', hidden: true });
+    champ.addEventListener('change', () => {
+      if (champ.files[0]) importerFichier(champ.files[0]);
+    });
+    document.body.append(champ);
+  }
+  return champ;
+}
+
+// Efface toutes les données après une confirmation explicite
+async function toutEffacer() {
+  const ok = await demanderConfirmation({
+    titre: 'Tout effacer ?',
+    message: 'Transactions, budgets et catégories personnalisées seront définitivement supprimés. Exporte une sauvegarde avant si tu veux pouvoir les récupérer.',
+    libelleValider: 'Tout effacer',
+    danger: true,
+  });
+  if (ok && await executer(store.reinitialiser)) {
+    afficherToast('Données effacées');
+    await rafraichir();
+  }
+}
+
 /* ===================== Actions transmises aux écrans ===================== */
 
 // Les écrans n'appellent jamais store.js directement : ils passent par ces fonctions
 const actions = {
   modifierTransaction: ouvrirModification,
   modifierBudget: ouvrirBudget,
+  ajouterCategorie: ouvrirAjoutCategorie,
+  supprimerCategorie,
+  arreterRecurrente,
+  exporterJSON,
+  exporterCSV,
+  importer: choisirFichierImport,
+  toutEffacer,
   changerFiltre(categorieId) {
     etat.filtre = categorieId;
     rendre();
