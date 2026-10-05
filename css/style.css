@@ -21,11 +21,12 @@
   --texte-3: #6b6a65;
 
   /* Accent (boutons principaux, onglet actif) */
-  --accent: #256abf;
-  --accent-texte: #ffffff;
-  --accent-doux: #e3eefb;
-  --accent-actif: #256abf;    /* texte de l'onglet actif (contraste ≥ 4,5:1) */
-  --lien: #1c5cab;
+  /* Couleur principale : noir en thème clair (blanc en thème sombre, plus bas) */
+  --accent: #0b0b0b;
+  --accent-texte: #ffffff;    /* texte posé sur la couleur principale */
+  --accent-doux: #e6e5df;     /* fond léger : pastille choisie, onglet actif */
+  --accent-actif: #0b0b0b;    /* texte de l'onglet actif */
+  --lien: #0b0b0b;
 
   /* Sens des montants (texte) */
   --positif: #006300;
@@ -67,11 +68,11 @@
     --texte: #ffffff;
     --texte-2: #c3c2b7;
     --texte-3: #a3a29a;
-    --accent: #256abf;
-    --accent-texte: #ffffff;
-    --accent-doux: #1a2c42;
-    --accent-actif: #6da7ec;
-    --lien: #86b6ef;
+    --accent: #ffffff;
+    --accent-texte: #0b0b0b;
+    --accent-doux: #3a3a37;
+    --accent-actif: #ffffff;
+    --lien: #ffffff;
     --positif: #3fc23f;
     --negatif: #ff8a8a;
     --serie-1: #3987e5;
@@ -204,6 +205,8 @@ svg {
   border: 0;
   background: none;
   color: var(--lien);
+  text-decoration: underline;
+  text-underline-offset: 3px;
   font-size: 0.875rem;
   padding: 0 12px;
   min-height: 44px;
@@ -1039,6 +1042,8 @@ svg {
 .lien-action {
   color: var(--lien);
   font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 /* ---------- 19. Réglages ---------- */
