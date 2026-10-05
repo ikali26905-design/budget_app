@@ -7,17 +7,19 @@
 // L'écran est donc toujours le reflet exact des données enregistrées.
 
 import * as store from './store.js';
-import { aujourdhui, moisDe, decalerMois, nomDuMois } from './dates.js';
+import { aujourdhui, moisDe, decalerMois, nomDuMois, libelleJour } from './dates.js';
 import { genererOccurrences } from './calculs.js';
-import { afficherToast, informer } from './ui.js';
+import { formaterMontant } from './money.js';
+import { afficherToast, informer, demanderConfirmation, fermerFeuille } from './ui.js';
 import { ouvrirFormulaireTransaction } from './formulaire.js';
-import { rendreAccueil } from './ecrans.js';
+import { rendreAccueil, rendreHistorique } from './ecrans.js';
 
 // État de l'interface (les données elles-mêmes viennent toujours de store.js)
 const etat = {
   donnees: null,
   mois: moisDe(aujourdhui()), // mois affiché, « AAAA-MM »
   ecran: 'accueil',
+  filtre: null, // id de la catégorie filtrée dans l'historique (null = toutes)
 };
 
 /* ===================== Outils ===================== */
@@ -54,13 +56,14 @@ function rendreEnTete() {
 // Fonctions de rendu de chaque écran
 const RENDUS = {
   accueil: rendreAccueil,
+  historique: rendreHistorique,
 };
 
 // Affiche l'écran courant et met à jour l'onglet actif
 function rendre() {
   rendreEnTete();
   const conteneur = document.getElementById(`ecran-${etat.ecran}`);
-  RENDUS[etat.ecran]?.(conteneur, { donnees: etat.donnees, mois: etat.mois });
+  RENDUS[etat.ecran]?.(conteneur, { donnees: etat.donnees, mois: etat.mois, filtre: etat.filtre, actions });
   document.querySelectorAll('.ecran').forEach((ecran) => {
     ecran.hidden = ecran.dataset.ecran !== etat.ecran;
   });
@@ -122,6 +125,70 @@ function ouvrirAjout() {
   });
 }
 
+// Enregistre la modification d'une transaction et met à jour son modèle mensuel si besoin
+async function enregistrerModification(transaction, modele, valeurs) {
+  const { chaqueMois, ...champs } = valeurs;
+  let recurrenteId = modele ? modele.id : null;
+  if (modele && chaqueMois) {
+    // Toujours mensuelle : les mois suivants reprendront les nouvelles valeurs
+    await store.modifierRecurrente(modele.id, modeleDepuis(valeurs));
+  } else if (modele && !chaqueMois) {
+    // Case décochée : on arrête la répétition (les transactions passées restent)
+    await store.supprimerRecurrente(modele.id);
+    recurrenteId = null;
+  } else if (!modele && chaqueMois) {
+    const nouveau = await store.ajouterRecurrente({ ...modeleDepuis(valeurs), dernierMois: moisDe(valeurs.date) });
+    recurrenteId = nouveau.id;
+  }
+  await store.modifierTransaction(transaction.id, { ...champs, recurrenteId });
+  if (!modele && chaqueMois) await appliquerRecurrences();
+}
+
+// Demande confirmation puis supprime une transaction
+async function confirmerSuppression(transaction) {
+  const categorie = etat.donnees.categories.find((c) => c.id === transaction.categorieId);
+  const estDepense = transaction.type === 'depense';
+  const ok = await demanderConfirmation({
+    titre: estDepense ? 'Supprimer cette dépense ?' : 'Supprimer ce revenu ?',
+    message: `${categorie?.nom ?? 'Transaction'} · ${formaterMontant(transaction.montant)} · ${libelleJour(transaction.date).toLowerCase()}. Cette action est définitive.`,
+    libelleValider: 'Supprimer',
+    danger: true,
+  });
+  if (!ok) return;
+  const reussi = await executer(() => store.supprimerTransaction(transaction.id));
+  if (!reussi) return;
+  fermerFeuille();
+  afficherToast(estDepense ? 'Dépense supprimée' : 'Revenu supprimé');
+  await rafraichir();
+}
+
+// Ouvre le formulaire pré-rempli pour modifier une transaction
+function ouvrirModification(transaction) {
+  const modele = etat.donnees.recurrentes.find((r) => r.id === transaction.recurrenteId) ?? null;
+  ouvrirFormulaireTransaction({
+    categories: etat.donnees.categories,
+    transaction,
+    estRecurrente: modele !== null,
+    surValider: (valeurs) => executer(async () => {
+      await enregistrerModification(transaction, modele, valeurs);
+      afficherToast('Transaction modifiée');
+      await rafraichir();
+    }),
+    surSupprimer: () => confirmerSuppression(transaction),
+  });
+}
+
+/* ===================== Actions transmises aux écrans ===================== */
+
+// Les écrans n'appellent jamais store.js directement : ils passent par ces fonctions
+const actions = {
+  modifierTransaction: ouvrirModification,
+  changerFiltre(categorieId) {
+    etat.filtre = categorieId;
+    rendre();
+  },
+};
+
 /* ===================== Navigation ===================== */
 
 // Change d'écran (onglets du bas)
@@ -134,6 +201,7 @@ function changerEcran(nomEcran) {
 // Avance ou recule d'un mois (n = 1 ou -1), ou revient au mois actuel (n = 0)
 function changerMois(n) {
   etat.mois = n === 0 ? moisDe(aujourdhui()) : decalerMois(etat.mois, n);
+  etat.filtre = null;
   rendre();
 }
 

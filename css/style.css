@@ -895,7 +895,114 @@ svg {
   font-weight: 600;
 }
 
-/* ---------- 17. Écrans larges (ordinateur) ---------- */
+/* ---------- 17. Historique ---------- */
+/* Pastilles de filtre : une rangée qui défile horizontalement */
+.filtres {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 0 -16px 12px;
+  padding: 2px 16px 6px;
+  scrollbar-width: none;
+}
+
+.filtres::-webkit-scrollbar {
+  display: none;
+}
+
+.filtre {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--bordure);
+  border-radius: 999px;
+  background: var(--surface);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.filtre[aria-pressed="true"] {
+  background: var(--texte);
+  color: var(--fond);
+  border-color: var(--texte);
+}
+
+.resume-filtre,
+.aide--centre {
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.jour__titre {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--texte-2);
+  margin: 16px 4px 8px;
+}
+
+.liste {
+  list-style: none;
+  padding: 4px 0;
+  margin: 0;
+}
+
+.liste > li + li {
+  border-top: 1px solid var(--bordure);
+}
+
+/* Toute la ligne est un bouton : grande zone tactile */
+.ligne-transaction {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 8px 16px;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+
+.ligne-transaction:active {
+  background: var(--surface-2);
+}
+
+.ligne-transaction__texte {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ligne-transaction__nom {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ligne-transaction__recurrente svg {
+  width: 16px;
+  height: 16px;
+  color: var(--texte-3);
+  vertical-align: middle;
+}
+
+.ligne-transaction__note {
+  color: var(--texte-3);
+  font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ligne-transaction__montant {
+  font-weight: 700;
+}
+
+/* ---------- 18. Écrans larges (ordinateur) ---------- */
 @media (min-width: 700px) {
   .contenu {
     padding-top: 16px;
