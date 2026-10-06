@@ -6,7 +6,8 @@
 
 import { creer, remplir, etatVide, badgeCategorie, icone } from './ui.js';
 import { formaterMontant, formaterMontantCourt, formaterMontantSigne } from './money.js';
-import { nomDuMoisSeul, deMois, libelleJour, finDuMois } from './dates.js';
+import { nomDuMoisSeul, nomDuMois, deMois, libelleJour, aujourdhui, decalerMois, dateLongue } from './dates.js';
+import { finPeriode, bornesDebut } from './periodes.js';
 import {
   transactionsDuMois, calculerTotaux, calculerSoldeCumule, calculerTotalParCategorie,
   calculerEtatBudget, pourcentage, grouperParJour, categoriesUtilisees, compterUtilisations,
@@ -127,15 +128,16 @@ function carteRepartition(duMois, categorie) {
 }
 
 // Écran d'accueil : solde du mois, totaux, solde cumulé, budget global, répartition
-export function rendreAccueil(conteneur, { donnees, mois }) {
-  const duMois = transactionsDuMois(donnees.transactions, mois);
-  const cumul = calculerSoldeCumule(donnees.transactions, mois);
+export function rendreAccueil(conteneur, { donnees, mois, moisCourant, actions }) {
+  const duMois = transactionsDuMois(donnees.transactions, mois, donnees.debutsMois);
+  const cumul = calculerSoldeCumule(donnees.transactions, mois, donnees.debutsMois);
   if (duMois.length === 0) {
     remplir(conteneur,
       creer('div', { class: 'carte' },
         etatVide('🪙', 'Aucune transaction ce mois-ci, appuie sur +',
           'Note tes dépenses et tes revenus au fil de l’eau : tu sauras toujours où tu en es.')),
-      donnees.transactions.length > 0 && ligneSoldeCumule(cumul, mois));
+      donnees.transactions.length > 0 && ligneSoldeCumule(cumul, mois),
+      carteNouveauMois(donnees, mois, moisCourant, actions));
     return;
   }
   const totaux = calculerTotaux(duMois);
@@ -145,7 +147,20 @@ export function rendreAccueil(conteneur, { donnees, mois }) {
     carteBudgetGlobal(donnees, totaux),
     carteRepartition(duMois, indexerCategories(donnees.categories)),
     ligneSoldeCumule(cumul, mois),
+    carteNouveauMois(donnees, mois, moisCourant, actions),
   );
+}
+
+// En fin de mois, propose de faire commencer le mois suivant (quand la paye arrive)
+function carteNouveauMois(donnees, mois, moisCourant, actions) {
+  const prochain = decalerMois(mois, 1);
+  // Seulement sur le mois en cours, à partir du 15, et si le mois suivant n'a pas déjà de début
+  if (mois !== moisCourant || donnees.debutsMois[prochain] || aujourdhui() < bornesDebut(prochain).min) return null;
+  return creer('div', { class: 'carte carte-nouveau-mois' },
+    creer('p', {}, creer('strong', {}, 'Ta paye est arrivée ?'), creer('br'),
+      creer('span', { class: 'aide' }, `Fais commencer ${nomDuMoisSeul(prochain)} dès aujourd’hui : tes prochaines transactions compteront pour ce mois.`)),
+    creer('button', { type: 'button', class: 'bouton bouton--secondaire bouton--plein', onclick: actions.commencerMois },
+      `Commencer ${nomDuMoisSeul(prochain)}`));
 }
 
 /* ===================== Historique ===================== */
@@ -220,7 +235,7 @@ function groupeJour(groupe, categorie, actions) {
 
 // Écran Historique : filtres, puis transactions du mois groupées par jour
 export function rendreHistorique(conteneur, { donnees, mois, filtre, actions }) {
-  const duMois = transactionsDuMois(donnees.transactions, mois);
+  const duMois = transactionsDuMois(donnees.transactions, mois, donnees.debutsMois);
   if (duMois.length === 0) {
     remplir(conteneur, creer('div', { class: 'carte' },
       etatVide('🧾', 'Aucune transaction ce mois-ci, appuie sur +', 'Tes dépenses et revenus apparaîtront ici, jour par jour.')));
@@ -274,7 +289,7 @@ function ligneSansPlafond(categorie, depense, actions) {
 
 // Écran Budgets : budget global, catégories avec plafond (les plus consommées d'abord), puis sans plafond
 export function rendreBudgets(conteneur, { donnees, mois, actions }) {
-  const duMois = transactionsDuMois(donnees.transactions, mois);
+  const duMois = transactionsDuMois(donnees.transactions, mois, donnees.debutsMois);
   const depensesParCategorie = new Map(calculerTotalParCategorie(duMois, 'depense').map((t) => [t.categorieId, t.total]));
   const totalDepenses = calculerTotaux(duMois).depenses;
   const categoriesDepense = donnees.categories.filter((c) => c.type === 'depense');
@@ -352,6 +367,27 @@ function sectionRecurrentes(donnees, actions) {
   ];
 }
 
+// Liste des débuts de mois indiqués (du plus récent au plus ancien), modifiables et supprimables
+function sectionDebutsMois(donnees, actions) {
+  const entrees = Object.entries(donnees.debutsMois).sort(([a], [b]) => b.localeCompare(a));
+  const contenu = entrees.length === 0
+    ? creer('p', { class: 'aide aide--carte' }, 'Par défaut, un mois commence le 1er. Quand ta paye arrive en fin de mois, indique ce jour-là comme début du mois suivant.')
+    : creer('ul', { class: 'liste' }, entrees.map(([mois, date]) => creer('li', { class: 'ligne-reglage' },
+      creer('button', { type: 'button', class: 'ligne-reglage__principal', onclick: () => actions.modifierDebutMois(mois) },
+        creer('span', { class: 'ligne-transaction__nom' }, nomDuMois(mois)),
+        creer('span', { class: 'ligne-transaction__note' }, `commence le ${dateLongue(date)}`)),
+      creer('button', { type: 'button', class: 'bouton-icone bouton-icone--danger', 'aria-label': `Faire recommencer ${nomDuMois(mois)} le 1er`, onclick: () => actions.supprimerDebutMois(mois) },
+        icone(...TRACES_CORBEILLE)))));
+  return [
+    creer('h2', { class: 'titre-section' }, 'Début des mois'),
+    creer('div', { class: 'carte carte--liste' },
+      contenu,
+      creer('div', { class: 'pied-liste' },
+        creer('button', { type: 'button', class: 'bouton bouton--secondaire bouton--plein', onclick: actions.commencerMois },
+          '+ Nouveau début de mois'))),
+  ];
+}
+
 // Boutons d'export, d'import et de remise à zéro
 function sectionSauvegarde(actions) {
   return [
@@ -374,6 +410,7 @@ export function rendreReglages(conteneur, { donnees, actions }) {
     sectionCategories('Catégories de revenus', 'revenu', donnees, actions),
     sectionCategories('Comptes d’épargne', 'epargne', donnees, actions),
     sectionRecurrentes(donnees, actions),
+    sectionDebutsMois(donnees, actions),
     sectionSauvegarde(actions),
     creer('p', { class: 'aide a-propos' }, 'Mon Budget · version 1.0', creer('br'), 'Aucun compte, aucun serveur : tout reste sur ton téléphone.'),
   );
@@ -425,10 +462,10 @@ function ligneCompte(compte, solde, soldeInitial, objectif, actions) {
 
 // Écran Épargne : total, boutons rapides, puis chaque compte avec son objectif
 export function rendreEpargne(conteneur, { donnees, mois, actions }) {
-  const soldes = calculerSoldesEpargne(donnees.transactions, { dateLimite: finDuMois(mois), soldesInitiaux: donnees.soldesInitiaux });
+  const soldes = calculerSoldesEpargne(donnees.transactions, { dateLimite: finPeriode(mois, donnees.debutsMois), soldesInitiaux: donnees.soldesInitiaux });
   const comptes = donnees.categories.filter((c) => c.type === 'epargne');
   const total = comptes.reduce((s, c) => s + (soldes.get(c.id) ?? 0), 0);
-  const netDuMois = calculerTotaux(transactionsDuMois(donnees.transactions, mois)).epargne;
+  const netDuMois = calculerTotaux(transactionsDuMois(donnees.transactions, mois, donnees.debutsMois)).epargne;
   // Message d'explication tant que l'épargne n'a jamais été utilisée
   const aucunMouvement = !donnees.transactions.some((t) => estEpargne(t.type)) && Object.keys(donnees.soldesInitiaux).length === 0;
   remplir(conteneur,

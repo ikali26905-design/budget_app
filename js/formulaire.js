@@ -3,7 +3,8 @@
 
 import { creer, ouvrirFeuille, fermerFeuille } from './ui.js';
 import { parserMontant, centimesVersSaisie, formaterMontant } from './money.js';
-import { aujourdhui, estDateValide } from './dates.js';
+import { aujourdhui, estDateValide, nomDuMois, dateLongue } from './dates.js';
+import { moisCommencantLe, bornesDebut } from './periodes.js';
 import { typeDeCategorie } from './calculs.js';
 
 // Les trois grandes familles (aussi utilisées pour les catégories)
@@ -353,4 +354,67 @@ export function ouvrirFormulaireCompte({ compte, soldeInitial, objectif, mouveme
   });
 
   ouvrirFeuille(`${compte.emoji} ${compte.nom}`, formulaire);
+}
+
+// Texte d'aide : quelles dates sont possibles pour le début d'un mois
+function texteBornes(mois) {
+  const { min, max } = bornesDebut(mois);
+  return `${nomDuMois(mois)} peut commencer entre le ${dateLongue(min)} et le ${dateLongue(max)}.`;
+}
+
+/**
+ * Ouvre la feuille « Début du mois » : le jour où un mois commence (souvent le jour de la paye).
+ * - date : date proposée (« AAAA-MM-JJ »)
+ * - mois : mois concerné si on modifie un début existant (sinon null : il est déduit de la date)
+ * - surValider({ mois, date }) : fonction async fournie par app.js
+ */
+export function ouvrirFormulaireDebutMois({ date, mois = null, surValider }) {
+  const champ = creer('input', { class: 'champ__input', type: 'date', id: 'champ-debut', value: date, required: true });
+  const apercu = creer('p', { class: 'apercu-mois', 'aria-live': 'polite' });
+  const boutonValider = creer('button', { type: 'submit', class: 'bouton bouton--plein' }, 'Enregistrer');
+  const formulaire = creer('form', { class: 'formulaire', novalidate: true },
+    creer('p', { class: 'aide aide--sous-champ aide--haut' },
+      'Choisis le jour où ta paye est arrivée : ce jour-là et les suivants compteront pour le nouveau mois.'),
+    creer('div', { class: 'champ' },
+      creer('label', { class: 'champ__label', for: 'champ-debut' }, 'Le mois commence le'),
+      champ),
+    apercu,
+    creer('p', { class: 'erreur', role: 'alert', hidden: true }),
+    creer('div', { class: 'feuille__actions' }, boutonValider),
+  );
+
+  // Aperçu en direct : quel mois cette date fait commencer
+  const majApercu = () => {
+    formulaire.querySelector('.erreur').hidden = true;
+    champ.removeAttribute('aria-invalid');
+    if (!estDateValide(champ.value)) {
+      apercu.textContent = '';
+      return;
+    }
+    apercu.textContent = mois
+      ? texteBornes(mois)
+      : `Début de ${nomDuMois(moisCommencantLe(champ.value)).toLowerCase()}`;
+  };
+  champ.addEventListener('input', majApercu);
+  majApercu();
+
+  formulaire.addEventListener('submit', async (evenement) => {
+    evenement.preventDefault();
+    if (!estDateValide(champ.value)) {
+      afficherErreur(formulaire, { erreur: 'Choisis une date valide.', champ: 'champ-debut' });
+      return;
+    }
+    // En modification, la date doit rester dans les bornes du mois concerné
+    const moisVise = moisCommencantLe(champ.value);
+    if (mois && moisVise !== mois) {
+      afficherErreur(formulaire, { erreur: texteBornes(mois), champ: 'champ-debut' });
+      return;
+    }
+    boutonValider.disabled = true;
+    const reussi = await surValider({ mois: moisVise, date: champ.value });
+    boutonValider.disabled = false;
+    if (reussi !== false) fermerFeuille();
+  });
+
+  ouvrirFeuille(mois ? `${nomDuMois(mois)} : début du mois` : 'Début d’un mois', formulaire);
 }

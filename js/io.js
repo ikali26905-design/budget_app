@@ -4,6 +4,7 @@
 import { MONTANT_MAX } from './money.js';
 import { aujourdhui, estDateValide } from './dates.js';
 import { typeDeCategorie } from './calculs.js';
+import { moisBudgetaire, moisCommencantLe } from './periodes.js';
 
 const TYPES_CATEGORIES = ['depense', 'revenu', 'epargne'];
 const TYPES_TRANSACTIONS = ['depense', 'revenu', 'epargne', 'retrait'];
@@ -49,11 +50,12 @@ function montantCSV(transaction) {
 // Produit un CSV (séparateur « ; », virgule décimale) que Excel et LibreOffice ouvrent directement
 export function genererCSV(donnees) {
   const categories = new Map(donnees.categories.map((c) => [c.id, c.nom]));
-  const entete = ['Date', 'Type', 'Catégorie', 'Montant (€)', 'Note', 'Mensuelle'];
+  const entete = ['Date', 'Mois', 'Type', 'Catégorie', 'Montant (€)', 'Note', 'Mensuelle'];
   const lignes = [...donnees.transactions]
     .sort((a, b) => a.date.localeCompare(b.date) || a.creeLe - b.creeLe)
     .map((t) => [
       t.date,
+      moisBudgetaire(t.date, donnees.debutsMois), // mois budgétaire (peut différer de la date, ex. paye)
       LIBELLES_CSV[t.type],
       champCSV(categories.get(t.categorieId) ?? 'Sans catégorie'),
       montantCSV(t), // pas de champCSV ici : le « - » d'un montant négatif doit rester un nombre
@@ -151,6 +153,15 @@ function montantsDesComptes(objet, typesCategories) {
   return resultat;
 }
 
+// Garde les débuts de mois valides : une vraie date, qui correspond bien au mois indiqué
+function nettoyerDebutsMois(objet) {
+  const resultat = {};
+  for (const [mois, date] of Object.entries(objet ?? {})) {
+    if (estDateValide(date) && moisCommencantLe(date) === mois) resultat[mois] = date;
+  }
+  return resultat;
+}
+
 /**
  * Valide un objet issu d'un fichier JSON importé.
  * Renvoie { ok: true, donnees } (données nettoyées) ou { ok: false, erreur } (message lisible).
@@ -184,8 +195,9 @@ export function validerImport(objet) {
     // Objectifs et soldes de départ : uniquement pour des comptes d'épargne existants
     const objectifs = montantsDesComptes(objet.objectifs, typesCategories);
     const soldesInitiaux = montantsDesComptes(objet.soldesInitiaux, typesCategories);
+    const debutsMois = nettoyerDebutsMois(objet.debutsMois);
 
-    return { ok: true, donnees: { categories, transactions, recurrentes, budgets, budgetGlobal, objectifs, soldesInitiaux } };
+    return { ok: true, donnees: { categories, transactions, recurrentes, budgets, budgetGlobal, objectifs, soldesInitiaux, debutsMois } };
   } catch (erreur) {
     if (erreur instanceof ErreurImport) return { ok: false, erreur: erreur.message };
     throw erreur;

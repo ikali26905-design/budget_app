@@ -121,12 +121,13 @@ const dialogue = document.getElementById('dialogue');
  * Affiche une boîte de confirmation et renvoie une Promise<boolean>.
  * Utilisation : if (await demanderConfirmation({ titre, message })) { ... }
  */
-export function demanderConfirmation({ titre, message, libelleValider = 'Confirmer', danger = false, sansAnnuler = false }) {
+export function demanderConfirmation({ titre, message, libelleValider = 'Confirmer', libelleAnnuler = 'Annuler', danger = false, sansAnnuler = false }) {
   document.getElementById('dialogue-titre').textContent = titre;
   document.getElementById('dialogue-message').textContent = message;
   const boutonValider = document.getElementById('dialogue-valider');
   const boutonAnnuler = document.getElementById('dialogue-annuler');
   boutonValider.textContent = libelleValider;
+  boutonAnnuler.textContent = libelleAnnuler;
   boutonValider.className = danger ? 'bouton bouton--danger' : 'bouton';
   boutonAnnuler.hidden = sansAnnuler;
   dialogue.classList.toggle('dialogue--simple', sansAnnuler);

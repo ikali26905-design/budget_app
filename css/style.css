@@ -704,7 +704,10 @@ svg {
   left: 50%;
   bottom: calc(var(--hauteur-onglets) + env(safe-area-inset-bottom) + 96px);
   transform: translate(-50%, 20px);
+  /* max-content : sinon, positionné à left: 50 %, le toast ne pourrait occuper que la moitié de l'écran */
+  width: max-content;
   max-width: calc(100% - 32px);
+  text-align: center;
   padding: 12px 20px;
   border-radius: 999px;
   background: var(--texte);
@@ -1083,6 +1086,42 @@ svg {
 
 .ligne-reglage .ligne-transaction__note {
   white-space: normal; /* ici, on préfère passer à la ligne plutôt que tronquer */
+}
+
+.ligne-reglage__principal {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: 48px;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+
+.nav-mois__periode {
+  color: var(--texte-2);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.apercu-mois {
+  font-weight: 700;
+  margin: -6px 0 16px;
+}
+
+.aide--haut {
+  margin: 0 0 16px;
+}
+
+.carte-nouveau-mois {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .bouton-icone--danger {

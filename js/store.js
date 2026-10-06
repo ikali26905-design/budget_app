@@ -46,6 +46,7 @@ function creerDonneesInitiales() {
     budgetGlobal: null,
     objectifs: {}, // objectif de chaque compte d'épargne, en centimes
     soldesInitiaux: {}, // ce que contenait chaque compte avant d'utiliser l'app, en centimes
+    debutsMois: {}, // jour de début des mois décalés (ex. paye) : { "2026-11": "2026-10-28" }
   };
 }
 
@@ -250,6 +251,16 @@ export async function definirCompte(compteId, { soldeInitial, objectif }) {
     else d.soldesInitiaux[compteId] = soldeInitial;
     if (objectif === null) delete d.objectifs[compteId];
     else d.objectifs[compteId] = objectif;
+  });
+}
+
+/* ===================== Début des mois ===================== */
+
+// Indique le jour où commence un mois (« AAAA-MM-JJ »), ou revient au 1er si null
+export async function definirDebutMois(mois, date) {
+  return modifier((d) => {
+    if (date === null) delete d.debutsMois[mois];
+    else d.debutsMois[mois] = date;
   });
 }
 

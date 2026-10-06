@@ -2,7 +2,8 @@
 // Elles reçoivent des données, renvoient un résultat, et ne touchent ni au DOM ni au stockage.
 // Avantage : on peut les tester dans Node sans navigateur.
 
-import { moisDe, decalerMois, dateDansMois, finDuMois } from './dates.js';
+import { moisDe, decalerMois, dateDansMois } from './dates.js';
+import { moisBudgetaire, finPeriode } from './periodes.js';
 
 // Seuil (en %) à partir duquel une barre de budget passe à l'orange
 export const SEUIL_ALERTE = 80;
@@ -10,9 +11,10 @@ export const SEUIL_ALERTE = 80;
 // Nombre de couleurs disponibles pour les catégories (--serie-1 à --serie-8)
 export const NB_COULEURS = 8;
 
-// Garde les transactions d'un mois donné (« 2026-10 »)
-export function transactionsDuMois(transactions, mois) {
-  return transactions.filter((t) => moisDe(t.date) === mois);
+// Garde les transactions d'un mois budgétaire donné (« 2026-10 »)
+// debuts : débuts de mois indiqués par l'utilisateur (voir periodes.js) ; {} = mois calendaires classiques
+export function transactionsDuMois(transactions, mois, debuts = {}) {
+  return transactions.filter((t) => moisBudgetaire(t.date, debuts) === mois);
 }
 
 // Additionne les montants d'une liste de transactions
@@ -56,9 +58,9 @@ export function calculerSoldesEpargne(transactions, { dateLimite = '9999-12-31',
   return soldes;
 }
 
-// Solde cumulé : toutes les transactions depuis le début jusqu'à la fin du mois donné
-export function calculerSoldeCumule(transactions, mois) {
-  const limite = finDuMois(mois);
+// Solde cumulé : toutes les transactions depuis le début jusqu'à la fin du mois (budgétaire) donné
+export function calculerSoldeCumule(transactions, mois, debuts = {}) {
+  const limite = finPeriode(mois, debuts);
   return calculerTotaux(transactions.filter((t) => t.date <= limite)).solde;
 }
 

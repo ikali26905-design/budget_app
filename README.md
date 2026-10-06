@@ -9,7 +9,8 @@ En quelques secondes, tu sais où va ton argent ce mois-ci et s'il te reste de l
 - **Épargne** : tu mets de l'argent de côté sur des comptes (Livret A, Projets, Imprévus… personnalisables) ou tu en retires. L'écran affiche le total épargné, le solde de chaque compte et un objectif facultatif avec sa barre de progression. Touche un compte pour indiquer son **solde de départ** (ce qu'il contenait avant d'utiliser l'app).
 - **Budgets** : plafond mensuel par catégorie et budget global. La barre est verte, devient orange à 80 % et rouge à 100 %.
 - **Transactions mensuelles** : la case « Chaque mois » répète automatiquement une transaction (loyer, bourse, abonnement…).
-- **Réglages** : catégories personnalisées, export JSON/CSV, import JSON.
+- **Début des mois** : un mois peut commencer le jour où ta paye arrive (ex. octobre commence le 28 septembre). Quand tu saisis un revenu en fin de mois, l'app te propose de faire commencer le mois suivant ce jour-là. Les débuts se modifient ou se suppriment dans les Réglages.
+- **Réglages** : catégories personnalisées, début des mois, export JSON/CSV, import JSON.
 - **PWA** : l'app s'installe sur l'écran d'accueil et fonctionne hors connexion. Le thème clair ou sombre suit le réglage du téléphone.
 
 Technologies : HTML, CSS et JavaScript « vanilla » (modules ES), sans framework, sans dépendance et sans étape de build.
@@ -96,6 +97,7 @@ budget_app/
 │   ├── money.js        Montants : saisie → centimes → « 1 234,56 € »
 │   ├── dates.js        Dates « AAAA-MM-JJ » : mois suivant, noms de mois, « Hier »…
 │   ├── calculs.js      Calculs purs : totaux, soldes, état des budgets, récurrences
+│   ├── periodes.js     Mois « budgétaires » : à quel mois appartient une date selon les débuts de mois
 │   ├── charts.js       Graphiques SVG : barres de répartition et jauges de budget
 │   ├── ui.js           Briques d'interface : création d'éléments, feuille, confirmation, toast
 │   ├── ecrans.js       Rendu des 5 écrans
@@ -163,7 +165,8 @@ Toutes les données sont enregistrées sous **une seule clé** `localStorage` : 
   "budgets": { "courses": 25000 },    // plafond mensuel par catégorie, en centimes
   "budgetGlobal": 90000,              // plafond pour toutes les dépenses du mois (ou null)
   "objectifs": { "livret-a": 100000 }, // objectif de chaque compte d'épargne, en centimes
-  "soldesInitiaux": { "livret-a": 120000 } // ce que contenait le compte avant d'utiliser l'app
+  "soldesInitiaux": { "livret-a": 120000 }, // ce que contenait le compte avant d'utiliser l'app
+  "debutsMois": { "2026-11": "2026-10-28" }  // novembre commence le 28 octobre (jour de la paye)
 }
 ```
 
@@ -174,6 +177,7 @@ Toutes les données sont enregistrées sous **une seule clé** `localStorage` : 
 - **Dates en texte `AAAA-MM-JJ`.** Pas de problème de fuseau horaire, et l'ordre alphabétique correspond à l'ordre chronologique.
 - **L'épargne.** Un versement (`epargne`) fait sortir l'argent du budget du mois, un retrait (`retrait`) l'y fait revenir. Le solde du mois vaut donc revenus − dépenses − (versements − retraits). Le solde d'un compte d'épargne vaut son solde de départ + ses versements − ses retraits, et il est **recalculé**, jamais stocké. Le solde de départ n'est pas une transaction : il ne modifie donc pas le solde du mois (cet argent était déjà de côté). On ne peut pas retirer plus que ce que contient le compte.
 - **Migration.** Les données enregistrées avant l'ajout de l'épargne (version 1) sont mises à niveau automatiquement à l'ouverture : la fonction `migrer()` de `store.js` ajoute les comptes d'épargne par défaut et le champ `objectifs`. Un ancien fichier de sauvegarde reste importable.
+- **Début des mois.** Un mois sans début indiqué commence le 1er ; sinon il commence à la date indiquée et se termine la veille du début du mois suivant. Le début du mois M doit tomber entre le 15 du mois précédent et le 14 du mois M : deux mois ne peuvent donc jamais se chevaucher, et une date suffit à savoir quel mois elle fait commencer. Les transactions gardent leur **vraie date** ; seul leur regroupement par mois est calculé (`moisBudgetaire()` dans `periodes.js`). Modifier ou supprimer un début de mois recalcule donc tout instantanément, sans toucher aux transactions. L'export CSV contient une colonne « Mois » avec ce mois budgétaire.
 - **Rien n'est stocké en double.** Les totaux, le solde cumulé et l'état des budgets sont **recalculés** à chaque affichage, donc ils ne peuvent jamais être faux.
 - **Transactions mensuelles.** À l'ouverture de l'app (et quand on y revient), `genererOccurrences()` crée les transactions manquantes jusqu'à aujourd'hui, puis met à jour `dernierMois`. Supprimer une occurrence ne la fait donc pas réapparaître.
 - **Suppression d'une catégorie.** Elle est impossible tant qu'une transaction ou une transaction mensuelle l'utilise. L'app affiche combien d'éléments la bloquent.

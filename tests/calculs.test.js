@@ -90,12 +90,13 @@ const donneesIO = {
   budgetGlobal: null,
   objectifs: {},
   soldesInitiaux: {},
+  debutsMois: { '2026-11': '2026-10-28' },
 };
 test('export CSV', () => {
   const lignes = io.genererCSV(donneesIO).split('\r\n');
-  assert.equal(lignes[0], '﻿Date;Type;Catégorie;Montant (€);Note;Mensuelle');
-  assert.equal(lignes[1], "2026-10-01;Revenu;Job;800,00;'=SOMME(A1);oui"); // formule neutralisée
-  assert.equal(lignes[2], '2026-10-05;Dépense;Courses;-18,90;"Lidl; ""promo""";non'); // guillemets échappés
+  assert.equal(lignes[0], '﻿Date;Mois;Type;Catégorie;Montant (€);Note;Mensuelle');
+  assert.equal(lignes[1], "2026-10-01;2026-10;Revenu;Job;800,00;'=SOMME(A1);oui"); // formule neutralisée
+  assert.equal(lignes[2], '2026-10-05;2026-10;Dépense;Courses;-18,90;"Lidl; ""promo""";non'); // guillemets échappés
 });
 test('import : export JSON puis réimport identique', () => {
   const r = io.validerImport(JSON.parse(io.genererJSON(donneesIO)));
@@ -151,8 +152,8 @@ const donneesEpargne = {
 };
 test('épargne : CSV et aller-retour JSON', () => {
   const lignes = io.genererCSV(donneesEpargne).split('\r\n');
-  assert.equal(lignes[1], '2026-10-06;Épargne (versement);Livret A;-50,00;;non');
-  assert.equal(lignes[2], '2026-10-07;Épargne (retrait);Livret A;10,00;;non');
+  assert.equal(lignes[1], '2026-10-06;2026-10;Épargne (versement);Livret A;-50,00;;non');
+  assert.equal(lignes[2], '2026-10-07;2026-10;Épargne (retrait);Livret A;10,00;;non');
   const r = io.validerImport(JSON.parse(io.genererJSON(donneesEpargne)));
   assert.equal(r.ok, true);
   assert.deepEqual(r.donnees, donneesEpargne);
@@ -174,4 +175,52 @@ test('épargne : le solde de départ compte dans le compte, mais pas dans le bud
   assert.equal(c.calculerSoldesEpargne([], { soldesInitiaux }).get('livret'), 120000);
   // Le solde du mois ne change pas : le solde de départ n'est pas une transaction
   assert.equal(c.calculerTotaux(c.transactionsDuMois(mouvementsEpargne, '2026-10')).solde, 54000);
+});
+
+const p = await import(R + 'periodes.js');
+const debuts = { '2026-10': '2026-09-28', '2026-11': '2026-10-29' };
+test('périodes : mois budgétaire d’une date', () => {
+  assert.equal(p.moisBudgetaire('2026-09-27', debuts), '2026-09'); // veille de la paye
+  assert.equal(p.moisBudgetaire('2026-09-28', debuts), '2026-10'); // jour de la paye d'octobre
+  assert.equal(p.moisBudgetaire('2026-10-28', debuts), '2026-10');
+  assert.equal(p.moisBudgetaire('2026-10-29', debuts), '2026-11');
+  assert.equal(p.moisBudgetaire('2026-12-05', debuts), '2026-12'); // décembre sans début indiqué : le 1er
+  assert.equal(p.moisBudgetaire('2026-11-30', debuts), '2026-11');
+  // Passage d'année
+  assert.equal(p.moisBudgetaire('2026-12-28', { '2027-01': '2026-12-27' }), '2027-01');
+  assert.equal(p.moisBudgetaire('2027-01-02', { '2027-01': '2027-01-03' }), '2026-12');
+  // Sans débuts indiqués : mois calendaires classiques
+  assert.equal(p.moisBudgetaire('2026-10-31'), '2026-10');
+});
+test('périodes : début, fin et bornes', () => {
+  assert.equal(p.debutPeriode('2026-10', debuts), '2026-09-28');
+  assert.equal(p.finPeriode('2026-10', debuts), '2026-10-28');
+  assert.equal(p.finPeriode('2026-09', debuts), '2026-09-27');
+  assert.equal(p.finPeriode('2026-11', debuts), '2026-11-30');
+  assert.deepEqual(p.bornesDebut('2027-01'), { min: '2026-12-15', max: '2027-01-14' });
+  assert.equal(p.moisCommencantLe('2026-10-28'), '2026-11');
+  assert.equal(p.moisCommencantLe('2026-11-03'), '2026-11');
+  assert.equal(p.moisCommencantLe('2026-12-15'), '2027-01');
+  assert.equal(p.estPeriodeDecalee('2026-12', debuts), false);
+  assert.equal(p.estPeriodeDecalee('2026-09', debuts), true); // sa fin est avancée au 27
+});
+test('périodes : totaux et solde cumulé suivent les débuts de mois', () => {
+  const tx = [
+    { type: 'revenu', montant: 150000, categorieId: 'job', date: '2026-09-28', creeLe: 1 },
+    { type: 'depense', montant: 2000, categorieId: 'courses', date: '2026-09-30', creeLe: 2 },
+    { type: 'depense', montant: 5000, categorieId: 'courses', date: '2026-10-15', creeLe: 3 },
+  ];
+  assert.equal(c.transactionsDuMois(tx, '2026-09', debuts).length, 0);
+  assert.equal(c.calculerTotaux(c.transactionsDuMois(tx, '2026-10', debuts)).solde, 150000 - 7000);
+  assert.equal(c.calculerSoldeCumule(tx, '2026-09', debuts), 0);
+  // Sans débuts : la paye du 28/09 compte en septembre
+  assert.equal(c.calculerTotaux(c.transactionsDuMois(tx, '2026-09')).solde, 148000);
+  assert.equal(d.decalerJour('2027-03-01', -1), '2027-02-28');
+  assert.equal(d.dateCourte('2026-09-28'), '28 sept.');
+});
+
+test('import : débuts de mois incohérents ignorés', () => {
+  const fichier = structuredClone(donneesIO);
+  fichier.debutsMois = { '2026-11': '2026-10-28', '2026-12': '2026-10-02', '2027-01': 'pas une date' };
+  assert.deepEqual(io.validerImport(fichier).donnees.debutsMois, { '2026-11': '2026-10-28' });
 });

@@ -4,6 +4,8 @@
 const formateurMois = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 const formateurJour = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
 const formateurMoisSeul = new Intl.DateTimeFormat('fr-FR', { month: 'long', timeZone: 'UTC' });
+const formateurDateCourte = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const formateurDateLongue = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', timeZone: 'UTC' });
 
 // Ajoute un zéro devant les nombres à un chiffre : 5 → « 05 »
 function deuxChiffres(nombre) {
@@ -69,6 +71,23 @@ export function nomDuMoisSeul(mois) {
 export function deMois(mois) {
   const nom = nomDuMoisSeul(mois);
   return /^[aeiouéâ]/i.test(nom) ? `d’${nom}` : `de ${nom}`;
+}
+
+// Décale une date de n jours (n peut être négatif) : (« 2026-11-01 », -1) → « 2026-10-31 »
+export function decalerJour(date, n) {
+  const d = versDateUTC(date);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+// Date courte : « 2026-09-28 » → « 28 sept. »
+export function dateCourte(date) {
+  return formateurDateCourte.format(versDateUTC(date));
+}
+
+// Date longue sans le jour de la semaine : « 2026-09-28 » → « 28 septembre »
+export function dateLongue(date) {
+  return formateurDateLongue.format(versDateUTC(date));
 }
 
 // Libellé d'un jour : « Aujourd'hui », « Hier » ou « Lundi 5 octobre »

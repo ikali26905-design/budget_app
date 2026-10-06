@@ -7,21 +7,25 @@
 // L'écran est donc toujours le reflet exact des données enregistrées.
 
 import * as store from './store.js';
-import { aujourdhui, moisDe, decalerMois, nomDuMois, libelleJour } from './dates.js';
+import { aujourdhui, moisDe, decalerMois, nomDuMois, nomDuMoisSeul, libelleJour, dateCourte, dateLongue } from './dates.js';
+import { moisBudgetaire, debutPeriode, finPeriode, estPeriodeDecalee, moisCommencantLe } from './periodes.js';
 import {
   genererOccurrences, transactionsDuMois, calculerTotaux, calculerTotalParCategorie, compterUtilisations, choisirCouleur,
   calculerSoldesEpargne,
 } from './calculs.js';
 import { formaterMontant, formaterMontantSigne } from './money.js';
 import { afficherToast, informer, demanderConfirmation, fermerFeuille } from './ui.js';
-import { ouvrirFormulaireTransaction, ouvrirFormulaireMontantCible, ouvrirFormulaireCategorie, ouvrirFormulaireCompte } from './formulaire.js';
+import {
+  ouvrirFormulaireTransaction, ouvrirFormulaireMontantCible, ouvrirFormulaireCategorie, ouvrirFormulaireCompte,
+  ouvrirFormulaireDebutMois,
+} from './formulaire.js';
 import { rendreAccueil, rendreHistorique, rendreEpargne, rendreBudgets, rendreReglages } from './ecrans.js';
 import { genererJSON, genererCSV, telecharger, nomFichier, validerImport } from './io.js';
 
 // État de l'interface (les données elles-mêmes viennent toujours de store.js)
 const etat = {
   donnees: null,
-  mois: moisDe(aujourdhui()), // mois affiché, « AAAA-MM »
+  mois: moisDe(aujourdhui()), // mois affiché, « AAAA-MM » (recalculé au démarrage avec les débuts de mois)
   ecran: 'accueil',
   filtre: null, // id de la catégorie filtrée dans l'historique (null = toutes)
 };
@@ -40,6 +44,11 @@ async function executer(action) {
   }
 }
 
+// Mois budgétaire en cours (si novembre a commencé le 28 octobre, le 30 octobre on est en novembre)
+function moisCourant() {
+  return moisBudgetaire(aujourdhui(), etat.donnees?.debutsMois);
+}
+
 // Recharge les données depuis le store puis redessine
 async function rafraichir() {
   etat.donnees = await store.chargerDonnees();
@@ -51,7 +60,12 @@ async function rafraichir() {
 // Met à jour l'en-tête : nom du mois et bouton « Revenir à ce mois-ci »
 function rendreEnTete() {
   document.getElementById('titre-mois').textContent = nomDuMois(etat.mois);
-  document.getElementById('mois-actuel').hidden = etat.mois === moisDe(aujourdhui());
+  document.getElementById('mois-actuel').hidden = etat.mois === moisCourant();
+  // Si le mois ne correspond pas au calendrier, on affiche ses vraies dates : « 28 sept. – 28 oct. »
+  const debuts = etat.donnees.debutsMois;
+  const periode = document.getElementById('periode-mois');
+  periode.hidden = !estPeriodeDecalee(etat.mois, debuts);
+  periode.textContent = `${dateCourte(debutPeriode(etat.mois, debuts))} – ${dateCourte(finPeriode(etat.mois, debuts))}`;
   const surReglages = etat.ecran === 'reglages';
   document.getElementById('nav-mois').hidden = surReglages;
   document.getElementById('titre-reglages').hidden = !surReglages;
@@ -70,7 +84,7 @@ const RENDUS = {
 function rendre() {
   rendreEnTete();
   const conteneur = document.getElementById(`ecran-${etat.ecran}`);
-  RENDUS[etat.ecran]?.(conteneur, { donnees: etat.donnees, mois: etat.mois, filtre: etat.filtre, actions });
+  RENDUS[etat.ecran]?.(conteneur, { donnees: etat.donnees, mois: etat.mois, moisCourant: moisCourant(), filtre: etat.filtre, actions });
   document.querySelectorAll('.ecran').forEach((ecran) => {
     ecran.hidden = ecran.dataset.ecran !== etat.ecran;
   });
@@ -155,11 +169,29 @@ function ouvrirAjout(typeParDefaut = 'depense') {
     surValider: (valeurs) => validerTransaction(valeurs, null, async () => {
       await ajouterTransaction(valeurs);
       const libelle = MESSAGES[valeurs.type].ajout;
-      const autreMois = moisDe(valeurs.date) !== etat.mois;
-      afficherToast(autreMois ? `${libelle} en ${nomDuMois(moisDe(valeurs.date)).toLowerCase()}` : libelle);
+      const moisTransaction = moisBudgetaire(valeurs.date, etat.donnees.debutsMois);
+      afficherToast(moisTransaction !== etat.mois ? `${libelle} en ${nomDuMois(moisTransaction).toLowerCase()}` : libelle);
       await rafraichir();
+      fermerFeuille(); // la question éventuelle s'affiche une fois la saisie refermée
+      await proposerNouveauMois(valeurs);
     }),
   });
+}
+
+// Après un revenu reçu en fin de mois, propose de faire commencer le mois suivant ce jour-là (paye)
+async function proposerNouveauMois(valeurs) {
+  if (valeurs.type !== 'revenu') return;
+  const debuts = etat.donnees.debutsMois;
+  const mois = moisCommencantLe(valeurs.date);
+  // Seulement pour un revenu reçu à partir du 15, si ce mois n'a pas encore de début et n'a pas déjà commencé
+  if (mois === moisDe(valeurs.date) || debuts[mois] || moisBudgetaire(valeurs.date, debuts) === mois) return;
+  const ok = await demanderConfirmation({
+    titre: `Commencer ${nomDuMoisSeul(mois)} ?`,
+    message: `Si ce revenu est ta paye de ${nomDuMoisSeul(mois)}, ce mois peut commencer le ${dateLongue(valeurs.date)} : ce revenu et tes prochaines dépenses compteront pour ${nomDuMoisSeul(mois)}.`,
+    libelleValider: 'Oui',
+    libelleAnnuler: 'Non',
+  });
+  if (ok) await enregistrerDebutMois({ mois, date: valeurs.date });
 }
 
 // Enregistre la modification d'une transaction et met à jour son modèle mensuel si besoin
@@ -218,7 +250,7 @@ function ouvrirModification(transaction) {
 
 // Ouvre la saisie du plafond d'une catégorie, ou du budget global si categorieId vaut null
 function ouvrirBudget(categorieId) {
-  const duMois = transactionsDuMois(etat.donnees.transactions, etat.mois);
+  const duMois = transactionsDuMois(etat.donnees.transactions, etat.mois, etat.donnees.debutsMois);
   const global = categorieId === null;
   const categorie = etat.donnees.categories.find((c) => c.id === categorieId);
   const depense = global
@@ -268,6 +300,44 @@ function ouvrirCompte(compteId) {
       });
     },
   });
+}
+
+/* ===================== Début des mois ===================== */
+
+// Enregistre le début d'un mois puis affiche le mois en cours
+function enregistrerDebutMois({ mois, date }) {
+  return executer(async () => {
+    await store.definirDebutMois(mois, date);
+    afficherToast(`${nomDuMois(mois)} commence le ${dateLongue(date)}`);
+    etat.donnees = await store.chargerDonnees();
+    etat.mois = moisCourant();
+    rendre();
+  });
+}
+
+// Ouvre la feuille pour indiquer le début d'un mois (date du jour proposée)
+function ouvrirDebutMois() {
+  ouvrirFormulaireDebutMois({ date: aujourdhui(), surValider: enregistrerDebutMois });
+}
+
+// Ouvre la feuille pour modifier le début d'un mois déjà indiqué
+function modifierDebutMois(mois) {
+  ouvrirFormulaireDebutMois({ date: etat.donnees.debutsMois[mois], mois, surValider: enregistrerDebutMois });
+}
+
+// Supprime le début indiqué d'un mois : il recommence le 1er
+async function supprimerDebutMois(mois) {
+  const ok = await demanderConfirmation({
+    titre: 'Revenir au 1er du mois ?',
+    message: `${nomDuMois(mois)} recommencera le 1er ${nomDuMoisSeul(mois)}. Tes transactions ne changent pas : seul leur regroupement par mois est recalculé.`,
+    libelleValider: 'Revenir au 1er',
+  });
+  if (ok && await executer(() => store.definirDebutMois(mois, null))) {
+    afficherToast(`${nomDuMois(mois)} commence le 1er`);
+    etat.donnees = await store.chargerDonnees();
+    etat.mois = moisCourant();
+    rendre();
+  }
 }
 
 /* ===================== Catégories ===================== */
@@ -433,6 +503,9 @@ const actions = {
   modifierBudget: ouvrirBudget,
   ajouterEpargne: ouvrirAjout,
   modifierCompte: ouvrirCompte,
+  commencerMois: ouvrirDebutMois,
+  modifierDebutMois,
+  supprimerDebutMois,
   ajouterCategorie: ouvrirAjoutCategorie,
   supprimerCategorie,
   arreterRecurrente,
@@ -457,7 +530,7 @@ function changerEcran(nomEcran) {
 
 // Avance ou recule d'un mois (n = 1 ou -1), ou revient au mois actuel (n = 0)
 function changerMois(n) {
-  etat.mois = n === 0 ? moisDe(aujourdhui()) : decalerMois(etat.mois, n);
+  etat.mois = n === 0 ? moisCourant() : decalerMois(etat.mois, n);
   etat.filtre = null;
   rendre();
 }
@@ -497,7 +570,9 @@ async function demarrer() {
   brancherEvenements();
   surRetourDansApp();
   await executer(appliquerRecurrences);
-  await rafraichir();
+  etat.donnees = await store.chargerDonnees();
+  etat.mois = moisCourant(); // tient compte des débuts de mois indiqués
+  rendre();
   enregistrerServiceWorker();
 }
 
