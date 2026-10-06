@@ -43,9 +43,11 @@ export function calculerTotaux(transactions) {
 }
 
 // Solde de chaque compte d'épargne jusqu'à une date incluse : Map { idCompte → centimes }
-// (idExclu permet d'ignorer une transaction, par exemple celle qu'on est en train de modifier)
-export function calculerSoldesEpargne(transactions, dateLimite = '9999-12-31', idExclu = null) {
-  const soldes = new Map();
+// - soldesInitiaux : ce que contenaient les comptes avant d'utiliser l'app ({ idCompte → centimes })
+// - idExclu : transaction à ignorer (par exemple celle qu'on est en train de modifier)
+export function calculerSoldesEpargne(transactions, { dateLimite = '9999-12-31', idExclu = null, soldesInitiaux = {} } = {}) {
+  // On part du solde de départ de chaque compte, puis on ajoute les versements et retire les retraits
+  const soldes = new Map(Object.entries(soldesInitiaux));
   for (const t of transactions) {
     if (!estEpargne(t.type) || t.date > dateLimite || t.id === idExclu) continue;
     const signe = t.type === 'epargne' ? 1 : -1;

@@ -1196,6 +1196,11 @@ svg {
   display: block;
 }
 
+/* « dont 1 200 € de départ » : passe à la ligne plutôt que d'être tronqué */
+.ligne-compte .ligne-transaction__note {
+  white-space: normal;
+}
+
 .objectif__pied {
   display: flex;
   justify-content: space-between;

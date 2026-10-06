@@ -14,7 +14,7 @@ import {
 } from './calculs.js';
 import { formaterMontant, formaterMontantSigne } from './money.js';
 import { afficherToast, informer, demanderConfirmation, fermerFeuille } from './ui.js';
-import { ouvrirFormulaireTransaction, ouvrirFormulaireMontantCible, ouvrirFormulaireCategorie } from './formulaire.js';
+import { ouvrirFormulaireTransaction, ouvrirFormulaireMontantCible, ouvrirFormulaireCategorie, ouvrirFormulaireCompte } from './formulaire.js';
 import { rendreAccueil, rendreHistorique, rendreEpargne, rendreBudgets, rendreReglages } from './ecrans.js';
 import { genererJSON, genererCSV, telecharger, nomFichier, validerImport } from './io.js';
 
@@ -117,7 +117,8 @@ const MESSAGES = {
 // (idExclu : en modification, on ne compte pas l'ancienne version de la transaction)
 function verifierRetrait(valeurs, idExclu = null) {
   if (valeurs.type !== 'retrait') return null;
-  const disponible = calculerSoldesEpargne(etat.donnees.transactions, '9999-12-31', idExclu).get(valeurs.categorieId) ?? 0;
+  const disponible = calculerSoldesEpargne(etat.donnees.transactions, { idExclu, soldesInitiaux: etat.donnees.soldesInitiaux })
+    .get(valeurs.categorieId) ?? 0;
   if (valeurs.montant <= disponible) return null;
   const compte = etat.donnees.categories.find((c) => c.id === valeurs.categorieId);
   return `Il n’y a que ${formaterMontant(Math.max(disponible, 0))} sur « ${compte.nom} ». Tu ne peux pas retirer plus.`;
@@ -243,23 +244,29 @@ function ouvrirBudget(categorieId) {
 
 /* ===================== Épargne ===================== */
 
-// Ouvre la saisie de l'objectif d'un compte d'épargne
-function ouvrirObjectif(compteId) {
+// Ouvre la feuille d'un compte d'épargne : solde de départ et objectif
+function ouvrirCompte(compteId) {
   const compte = etat.donnees.categories.find((c) => c.id === compteId);
-  const solde = calculerSoldesEpargne(etat.donnees.transactions).get(compteId) ?? 0;
-  const enregistrer = (objectif, message) => executer(async () => {
-    await store.definirObjectif(compteId, objectif);
-    afficherToast(message);
-    await rafraichir();
-  });
-  ouvrirFormulaireMontantCible({
-    titre: `Objectif ${compte.emoji} ${compte.nom}`,
-    valeur: etat.donnees.objectifs[compteId] ?? null,
-    libelleChamp: 'Montant à atteindre',
-    aide: `Déjà sur ce compte : ${formaterMontant(solde)}.`,
-    libelleRetirer: 'Retirer l’objectif',
-    surValider: (objectif) => enregistrer(objectif, 'Objectif enregistré'),
-    surRetirer: () => enregistrer(null, 'Objectif retiré'),
+  // Versements − retraits enregistrés dans l'app (sans le solde de départ)
+  const mouvements = calculerSoldesEpargne(etat.donnees.transactions).get(compteId) ?? 0;
+  ouvrirFormulaireCompte({
+    compte,
+    soldeInitial: etat.donnees.soldesInitiaux[compteId] ?? null,
+    objectif: etat.donnees.objectifs[compteId] ?? null,
+    mouvements,
+    surValider: async (valeurs) => {
+      // Baisser le solde de départ ne doit pas rendre le compte négatif (à cause de retraits déjà faits)
+      if ((valeurs.soldeInitial ?? 0) + mouvements < 0) {
+        await informer('Solde de départ trop bas',
+          `Des retraits ont déjà été enregistrés sur ce compte : le solde de départ doit être d’au moins ${formaterMontant(-mouvements)}.`);
+        return false;
+      }
+      return executer(async () => {
+        await store.definirCompte(compteId, valeurs);
+        afficherToast('Compte mis à jour');
+        await rafraichir();
+      });
+    },
   });
 }
 
@@ -281,6 +288,15 @@ function ouvrirAjoutCategorie(type) {
   });
 }
 
+// Précise ce qui disparaît avec une catégorie : plafond, solde de départ, objectif
+function detailsSuppression(id) {
+  const d = etat.donnees;
+  if (d.soldesInitiaux[id]) return `, ainsi que son solde de départ de ${formaterMontant(d.soldesInitiaux[id])}`;
+  if (d.budgets[id]) return ', ainsi que son plafond';
+  if (d.objectifs[id]) return ', ainsi que son objectif';
+  return '';
+}
+
 // Supprime une catégorie si elle n'est utilisée nulle part (sinon on explique pourquoi c'est impossible)
 async function supprimerCategorie(categorie) {
   const utilisations = compterUtilisations(categorie.id, etat.donnees);
@@ -300,7 +316,7 @@ async function supprimerCategorie(categorie) {
   }
   const ok = await demanderConfirmation({
     titre: 'Supprimer cette catégorie ?',
-    message: `« ${categorie.nom} » sera retirée de la liste${etat.donnees.budgets[categorie.id] ? ', ainsi que son plafond' : ''}.`,
+    message: `« ${categorie.nom} » sera retirée de la liste${detailsSuppression(categorie.id)}.`,
     libelleValider: 'Supprimer',
     danger: true,
   });
@@ -416,7 +432,7 @@ const actions = {
   modifierTransaction: ouvrirModification,
   modifierBudget: ouvrirBudget,
   ajouterEpargne: ouvrirAjout,
-  modifierObjectif: ouvrirObjectif,
+  modifierCompte: ouvrirCompte,
   ajouterCategorie: ouvrirAjoutCategorie,
   supprimerCategorie,
   arreterRecurrente,

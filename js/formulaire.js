@@ -2,7 +2,7 @@
 // Objectif : une saisie en 3 gestes → « + », taper le montant, toucher une catégorie, valider.
 
 import { creer, ouvrirFeuille, fermerFeuille } from './ui.js';
-import { parserMontant, centimesVersSaisie } from './money.js';
+import { parserMontant, centimesVersSaisie, formaterMontant } from './money.js';
 import { aujourdhui, estDateValide } from './dates.js';
 import { typeDeCategorie } from './calculs.js';
 
@@ -39,14 +39,14 @@ function typeSaisi(formulaire) {
   return famille === 'epargne' ? formulaire.querySelector('input[name="sens"]:checked').value : famille;
 }
 
-// Crée le gros champ « Montant » qui ouvre le clavier numérique
-function creerChampMontant(valeurInitiale, autofocus) {
+// Crée un gros champ de montant en euros, qui ouvre le clavier numérique
+function creerChampMontant(valeurInitiale, autofocus, { id = 'champ-montant', libelle = 'Montant' } = {}) {
   return creer('div', { class: 'champ champ-montant' },
-    creer('label', { class: 'champ__label', for: 'champ-montant' }, 'Montant'),
+    creer('label', { class: 'champ__label', for: id }, libelle),
     creer('input', {
       class: 'champ__input',
-      id: 'champ-montant',
-      name: 'montant',
+      id,
+      name: id,
       // inputmode="decimal" : clavier numérique AVEC virgule (type="number" gère mal la virgule française)
       inputmode: 'decimal',
       autocomplete: 'off',
@@ -101,7 +101,7 @@ function creerCaseRecurrente(cochee) {
 function lireFormulaire(formulaire) {
   const donnees = new FormData(formulaire);
   const type = typeSaisi(formulaire);
-  const montant = parserMontant(donnees.get('montant'));
+  const montant = parserMontant(donnees.get('champ-montant'));
   if (montant === null) return { erreur: 'Saisis un montant valide, par exemple 12,50.', champ: 'champ-montant' };
   const categorieId = donnees.get('categorie');
   if (!categorieId) {
@@ -299,4 +299,58 @@ export function ouvrirFormulaireCategorie({ type, nomExiste, surValider }) {
   });
 
   ouvrirFeuille('Nouvelle catégorie', formulaire);
+}
+
+// Lit un champ de montant facultatif : vide (ou 0) → null, sinon des centimes ; undefined si invalide
+function lireMontantFacultatif(formulaire, id) {
+  const texte = formulaire.querySelector(`#${id}`).value.trim();
+  if (texte === '' || /^0+([,.]0*)?$/.test(texte)) return null;
+  return parserMontant(texte) ?? undefined;
+}
+
+/**
+ * Ouvre la feuille d'un compte d'épargne : solde de départ et objectif (tous deux facultatifs).
+ * - compte : la catégorie d'épargne
+ * - soldeInitial / objectif : valeurs actuelles en centimes (ou null)
+ * - mouvements : versements − retraits déjà enregistrés dans l'app, affichés pour aider
+ * - surValider({ soldeInitial, objectif }) : fonction async fournie par app.js
+ */
+export function ouvrirFormulaireCompte({ compte, soldeInitial, objectif, mouvements, surValider }) {
+  const enEuros = (centimes) => (centimes ? centimesVersSaisie(centimes) : '');
+  const boutonValider = creer('button', { type: 'submit', class: 'bouton bouton--plein' }, 'Enregistrer');
+  const formulaire = creer('form', { class: 'formulaire', novalidate: true },
+    creerChampMontant(enEuros(soldeInitial), true, { id: 'champ-solde-initial', libelle: 'Solde de départ' }),
+    creer('p', { class: 'aide aide--sous-champ' },
+      'Ce que contenait déjà le compte avant que tu utilises l’app. Il n’est pas déduit de ton budget du mois.',
+      mouvements !== 0 && ` Mouvements enregistrés depuis : ${mouvements > 0 ? '+' : '−'}${formaterMontant(Math.abs(mouvements))}.`),
+    creerChampMontant(enEuros(objectif), false, { id: 'champ-objectif', libelle: 'Objectif (facultatif)' }),
+    creer('p', { class: 'erreur', role: 'alert', hidden: true }),
+    creer('div', { class: 'feuille__actions' }, boutonValider),
+  );
+
+  formulaire.addEventListener('input', () => {
+    formulaire.querySelector('.erreur').hidden = true;
+    formulaire.querySelector('[aria-invalid]')?.removeAttribute('aria-invalid');
+  });
+
+  formulaire.addEventListener('submit', async (evenement) => {
+    evenement.preventDefault();
+    const valeurs = {
+      soldeInitial: lireMontantFacultatif(formulaire, 'champ-solde-initial'),
+      objectif: lireMontantFacultatif(formulaire, 'champ-objectif'),
+    };
+    // undefined = texte saisi mais illisible ; null = champ laissé vide (aucune valeur)
+    for (const [cle, id] of [['soldeInitial', 'champ-solde-initial'], ['objectif', 'champ-objectif']]) {
+      if (valeurs[cle] === undefined) {
+        afficherErreur(formulaire, { erreur: 'Saisis un montant valide, par exemple 1 200,50, ou laisse le champ vide.', champ: id });
+        return;
+      }
+    }
+    boutonValider.disabled = true;
+    const reussi = await surValider(valeurs);
+    boutonValider.disabled = false;
+    if (reussi !== false) fermerFeuille();
+  });
+
+  ouvrirFeuille(`${compte.emoji} ${compte.nom}`, formulaire);
 }

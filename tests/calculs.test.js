@@ -89,6 +89,7 @@ const donneesIO = {
   budgets: { courses: 25000 },
   budgetGlobal: null,
   objectifs: {},
+  soldesInitiaux: {},
 };
 test('export CSV', () => {
   const lignes = io.genererCSV(donneesIO).split('\r\n');
@@ -132,8 +133,8 @@ test('épargne : solde de chaque compte, à une date et en excluant une transact
   const soldes = c.calculerSoldesEpargne(mouvementsEpargne);
   assert.equal(soldes.get('livret'), 20000 + 15000 - 4000);
   assert.equal(soldes.get('voyage'), 5000);
-  assert.equal(c.calculerSoldesEpargne(mouvementsEpargne, '2026-09-30').get('livret'), 20000);
-  assert.equal(c.calculerSoldesEpargne(mouvementsEpargne, undefined, 'x1').get('livret'), 35000);
+  assert.equal(c.calculerSoldesEpargne(mouvementsEpargne, { dateLimite: '2026-09-30' }).get('livret'), 20000);
+  assert.equal(c.calculerSoldesEpargne(mouvementsEpargne, { idExclu: 'x1' }).get('livret'), 35000);
   assert.equal(c.typeDeCategorie('retrait'), 'epargne');
   assert.equal(m.formaterMontantSigne(4000, 'retrait').replace(/\s/g, ' '), '+40,00 €');
   assert.equal(m.formaterMontantSigne(4000, 'epargne').replace(/\s/g, ' '), '−40,00 €');
@@ -146,6 +147,7 @@ const donneesEpargne = {
     { id: 'x', type: 'retrait', montant: 1000, categorieId: 'livret', date: '2026-10-07', note: '', recurrenteId: null, creeLe: 4 },
   ],
   objectifs: { livret: 100000 },
+  soldesInitiaux: { livret: 120000 },
 };
 test('épargne : CSV et aller-retour JSON', () => {
   const lignes = io.genererCSV(donneesEpargne).split('\r\n');
@@ -162,4 +164,14 @@ test('import : une transaction doit viser une catégorie du bon type', () => {
   const ancien = structuredClone(donneesIO); // fichier d'avant l'épargne : accepté
   delete ancien.objectifs;
   assert.equal(io.validerImport(ancien).ok, true);
+});
+
+test('épargne : le solde de départ compte dans le compte, mais pas dans le budget du mois', () => {
+  const soldesInitiaux = { livret: 120000, voyage: 0 };
+  const soldes = c.calculerSoldesEpargne(mouvementsEpargne, { soldesInitiaux });
+  assert.equal(soldes.get('livret'), 120000 + 20000 + 15000 - 4000);
+  // Un compte avec seulement un solde de départ (aucun mouvement) apparaît quand même
+  assert.equal(c.calculerSoldesEpargne([], { soldesInitiaux }).get('livret'), 120000);
+  // Le solde du mois ne change pas : le solde de départ n'est pas une transaction
+  assert.equal(c.calculerTotaux(c.transactionsDuMois(mouvementsEpargne, '2026-10')).solde, 54000);
 });

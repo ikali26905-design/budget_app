@@ -45,6 +45,7 @@ function creerDonneesInitiales() {
     budgets: {},
     budgetGlobal: null,
     objectifs: {}, // objectif de chaque compte d'épargne, en centimes
+    soldesInitiaux: {}, // ce que contenait chaque compte avant d'utiliser l'app, en centimes
   };
 }
 
@@ -61,7 +62,7 @@ function copier(objet) {
 
 // Met à niveau des données d'une ancienne version (ou d'un import) vers la version actuelle
 function migrer(donnees) {
-  // Les champs absents (ex. « objectifs » avant la version 2) prennent leur valeur par défaut
+  // Les champs absents (ex. « objectifs » ou « soldesInitiaux » dans d'anciennes données) prennent leur valeur par défaut
   const resultat = { ...creerDonneesInitiales(), ...donnees, version: VERSION_DONNEES };
   // Avant la version 2, il n'y avait pas d'épargne : on ajoute les comptes par défaut
   if (!resultat.categories.some((c) => c.type === 'epargne')) {
@@ -221,6 +222,7 @@ export async function supprimerCategorie(id) {
     d.categories = d.categories.filter((c) => c.id !== id);
     delete d.budgets[id];
     delete d.objectifs[id];
+    delete d.soldesInitiaux[id];
   });
 }
 
@@ -241,9 +243,11 @@ export async function definirBudgetGlobal(plafond) {
   });
 }
 
-// Définit l'objectif d'un compte d'épargne (en centimes), ou le retire si null
-export async function definirObjectif(compteId, objectif) {
+// Enregistre le solde de départ et l'objectif d'un compte d'épargne (en centimes, null = aucun)
+export async function definirCompte(compteId, { soldeInitial, objectif }) {
   return modifier((d) => {
+    if (soldeInitial === null) delete d.soldesInitiaux[compteId];
+    else d.soldesInitiaux[compteId] = soldeInitial;
     if (objectif === null) delete d.objectifs[compteId];
     else d.objectifs[compteId] = objectif;
   });

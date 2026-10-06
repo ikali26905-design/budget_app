@@ -142,6 +142,15 @@ function verifierIdsUniques(liste, quoi) {
   verifier(new Set(liste.map((e) => e.id)).size === liste.length, `Le fichier contient deux ${quoi} avec le même identifiant.`);
 }
 
+// Garde, dans un objet { idCompte → centimes }, les montants valides de comptes d'épargne existants
+function montantsDesComptes(objet, typesCategories) {
+  const resultat = {};
+  for (const [id, montant] of Object.entries(objet ?? {})) {
+    if (typesCategories.get(id) === 'epargne' && estMontant(montant)) resultat[id] = montant;
+  }
+  return resultat;
+}
+
 /**
  * Valide un objet issu d'un fichier JSON importé.
  * Renvoie { ok: true, donnees } (données nettoyées) ou { ok: false, erreur } (message lisible).
@@ -172,13 +181,11 @@ export function validerImport(objet) {
       if (typesCategories.get(id) === 'depense' && estMontant(plafond)) budgets[id] = plafond;
     }
     const budgetGlobal = estMontant(objet.budgetGlobal) ? objet.budgetGlobal : null;
-    // Objectifs : uniquement pour des comptes d'épargne existants
-    const objectifs = {};
-    for (const [id, objectif] of Object.entries(objet.objectifs ?? {})) {
-      if (typesCategories.get(id) === 'epargne' && estMontant(objectif)) objectifs[id] = objectif;
-    }
+    // Objectifs et soldes de départ : uniquement pour des comptes d'épargne existants
+    const objectifs = montantsDesComptes(objet.objectifs, typesCategories);
+    const soldesInitiaux = montantsDesComptes(objet.soldesInitiaux, typesCategories);
 
-    return { ok: true, donnees: { categories, transactions, recurrentes, budgets, budgetGlobal, objectifs } };
+    return { ok: true, donnees: { categories, transactions, recurrentes, budgets, budgetGlobal, objectifs, soldesInitiaux } };
   } catch (erreur) {
     if (erreur instanceof ErreurImport) return { ok: false, erreur: erreur.message };
     throw erreur;

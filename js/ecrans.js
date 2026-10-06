@@ -408,31 +408,36 @@ function blocObjectif(solde, objectif, couleur, nom) {
       creer('span', { class: 'montant' }, atteint ? 'Objectif atteint 🎉' : `Reste ${formaterMontantCourt(objectif - solde)}`)));
 }
 
-// Ligne d'un compte d'épargne cliquable (ouvre la saisie de l'objectif)
-function ligneCompte(compte, solde, objectif, actions) {
+// Ligne d'un compte d'épargne cliquable (ouvre la feuille : solde de départ + objectif)
+function ligneCompte(compte, solde, soldeInitial, objectif, actions) {
   return creer('li', {},
-    creer('button', { type: 'button', class: 'ligne-compte', onclick: () => actions.modifierObjectif(compte.id) },
+    creer('button', { type: 'button', class: 'ligne-compte', onclick: () => actions.modifierCompte(compte.id) },
       creer('span', { class: 'ligne-compte__haut' },
         badgeCategorie(compte),
-        creer('span', { class: 'ligne-transaction__nom' }, compte.nom),
+        creer('span', { class: 'ligne-transaction__texte' },
+          creer('span', { class: 'ligne-transaction__nom' }, compte.nom),
+          soldeInitial && creer('span', { class: 'ligne-transaction__note' }, `dont ${formaterMontantCourt(soldeInitial)} de départ`)),
         creer('strong', { class: 'montant' }, formaterMontant(solde))),
-      blocObjectif(solde, objectif, `var(--serie-${compte.couleur})`, compte.nom)));
+      soldeInitial || objectif
+        ? blocObjectif(solde, objectif, `var(--serie-${compte.couleur})`, compte.nom)
+        : creer('span', { class: 'lien-action' }, 'Indiquer le solde actuel')));
 }
 
 // Écran Épargne : total, boutons rapides, puis chaque compte avec son objectif
 export function rendreEpargne(conteneur, { donnees, mois, actions }) {
-  const soldes = calculerSoldesEpargne(donnees.transactions, finDuMois(mois));
+  const soldes = calculerSoldesEpargne(donnees.transactions, { dateLimite: finDuMois(mois), soldesInitiaux: donnees.soldesInitiaux });
   const comptes = donnees.categories.filter((c) => c.type === 'epargne');
   const total = comptes.reduce((s, c) => s + (soldes.get(c.id) ?? 0), 0);
   const netDuMois = calculerTotaux(transactionsDuMois(donnees.transactions, mois)).epargne;
-  const aucunMouvement = !donnees.transactions.some((t) => estEpargne(t.type));
+  // Message d'explication tant que l'épargne n'a jamais été utilisée
+  const aucunMouvement = !donnees.transactions.some((t) => estEpargne(t.type)) && Object.keys(donnees.soldesInitiaux).length === 0;
   remplir(conteneur,
     carteTotalEpargne(total, netDuMois, mois, actions),
     aucunMouvement && creer('p', { class: 'aide aide--centre' },
       'Mets de l’argent de côté pour un projet ou les imprévus : il est déduit de ton solde du mois et s’accumule ici.'),
     creer('h2', { class: 'titre-section' }, 'Mes comptes'),
     creer('ul', { class: 'liste carte carte--liste' },
-      comptes.map((c) => ligneCompte(c, soldes.get(c.id) ?? 0, donnees.objectifs[c.id], actions))),
-    creer('p', { class: 'aide aide--centre' }, 'Touche un compte pour définir son objectif. Ajoute ou supprime des comptes dans Réglages.'),
+      comptes.map((c) => ligneCompte(c, soldes.get(c.id) ?? 0, donnees.soldesInitiaux[c.id], donnees.objectifs[c.id], actions))),
+    creer('p', { class: 'aide aide--centre' }, 'Touche un compte pour indiquer ce qu’il contient déjà et son objectif. Ajoute ou supprime des comptes dans Réglages.'),
   );
 }

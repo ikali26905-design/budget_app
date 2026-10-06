@@ -6,7 +6,7 @@ En quelques secondes, tu sais où va ton argent ce mois-ci et s'il te reste de l
 - **Accueil** : solde du mois en grand (revenus − dépenses − épargne), revenus, dépenses et épargne du mois, budget global, répartition des dépenses par catégorie, solde cumulé.
 - **Ajout rapide** : « + » → montant (clavier numérique) → catégorie → valider. La date du jour est déjà remplie.
 - **Historique** : transactions du mois groupées par jour, filtre par catégorie, modification, suppression avec confirmation.
-- **Épargne** : tu mets de l'argent de côté sur des comptes (Livret A, Projets, Imprévus… personnalisables) ou tu en retires. L'écran affiche le total épargné, le solde de chaque compte et un objectif facultatif avec sa barre de progression.
+- **Épargne** : tu mets de l'argent de côté sur des comptes (Livret A, Projets, Imprévus… personnalisables) ou tu en retires. L'écran affiche le total épargné, le solde de chaque compte et un objectif facultatif avec sa barre de progression. Touche un compte pour indiquer son **solde de départ** (ce qu'il contenait avant d'utiliser l'app).
 - **Budgets** : plafond mensuel par catégorie et budget global. La barre est verte, devient orange à 80 % et rouge à 100 %.
 - **Transactions mensuelles** : la case « Chaque mois » répète automatiquement une transaction (loyer, bourse, abonnement…).
 - **Réglages** : catégories personnalisées, export JSON/CSV, import JSON.
@@ -162,7 +162,8 @@ Toutes les données sont enregistrées sous **une seule clé** `localStorage` : 
   ],
   "budgets": { "courses": 25000 },    // plafond mensuel par catégorie, en centimes
   "budgetGlobal": 90000,              // plafond pour toutes les dépenses du mois (ou null)
-  "objectifs": { "livret-a": 100000 } // objectif de chaque compte d'épargne, en centimes
+  "objectifs": { "livret-a": 100000 }, // objectif de chaque compte d'épargne, en centimes
+  "soldesInitiaux": { "livret-a": 120000 } // ce que contenait le compte avant d'utiliser l'app
 }
 ```
 
@@ -171,7 +172,7 @@ Toutes les données sont enregistrées sous **une seule clé** `localStorage` : 
 - **Montants en centimes (entiers).** En JavaScript, `0.1 + 0.2` vaut `0.30000000000000004`. Avec des entiers, aucun arrondi ne fausse les totaux. La saisie « 12,5 » est analysée comme du **texte** (`"12"` et `"5"` → 1250 centimes), sans jamais passer par un nombre à virgule. On ne divise par 100 qu'au moment d'afficher.
 - **Montants toujours positifs.** C'est le champ `type` qui indique le sens, ce qui évite les erreurs de signe.
 - **Dates en texte `AAAA-MM-JJ`.** Pas de problème de fuseau horaire, et l'ordre alphabétique correspond à l'ordre chronologique.
-- **L'épargne.** Un versement (`epargne`) fait sortir l'argent du budget du mois, un retrait (`retrait`) l'y fait revenir. Le solde du mois vaut donc revenus − dépenses − (versements − retraits). Le solde d'un compte d'épargne est la somme de ses versements moins ses retraits, et il est **recalculé**, jamais stocké. On ne peut pas retirer plus que ce que contient le compte.
+- **L'épargne.** Un versement (`epargne`) fait sortir l'argent du budget du mois, un retrait (`retrait`) l'y fait revenir. Le solde du mois vaut donc revenus − dépenses − (versements − retraits). Le solde d'un compte d'épargne vaut son solde de départ + ses versements − ses retraits, et il est **recalculé**, jamais stocké. Le solde de départ n'est pas une transaction : il ne modifie donc pas le solde du mois (cet argent était déjà de côté). On ne peut pas retirer plus que ce que contient le compte.
 - **Migration.** Les données enregistrées avant l'ajout de l'épargne (version 1) sont mises à niveau automatiquement à l'ouverture : la fonction `migrer()` de `store.js` ajoute les comptes d'épargne par défaut et le champ `objectifs`. Un ancien fichier de sauvegarde reste importable.
 - **Rien n'est stocké en double.** Les totaux, le solde cumulé et l'état des budgets sont **recalculés** à chaque affichage, donc ils ne peuvent jamais être faux.
 - **Transactions mensuelles.** À l'ouverture de l'app (et quand on y revient), `genererOccurrences()` crée les transactions manquantes jusqu'à aujourd'hui, puis met à jour `dernierMois`. Supprimer une occurrence ne la fait donc pas réapparaître.
