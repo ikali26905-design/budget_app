@@ -21,12 +21,12 @@
   --texte-3: #6b6a65;
 
   /* Accent (boutons principaux, onglet actif) */
-  /* Couleur principale : noir en thème clair (blanc en thème sombre, plus bas) */
-  --accent: #0b0b0b;
+  /* Couleur principale : magenta (contraste 5,7:1 avec le texte blanc des boutons) */
+  --accent: #c2008f;
   --accent-texte: #ffffff;    /* texte posé sur la couleur principale */
-  --accent-doux: #e6e5df;     /* fond léger : pastille choisie, onglet actif */
-  --accent-actif: #0b0b0b;    /* texte de l'onglet actif */
-  --lien: #0b0b0b;
+  --accent-doux: #fae1f2;     /* fond léger : pastille choisie, onglet actif */
+  --accent-actif: #c2008f;    /* texte de l'onglet actif */
+  --lien: #c2008f;
 
   /* Sens des montants (texte) */
   --positif: #006300;
@@ -68,11 +68,12 @@
     --texte: #ffffff;
     --texte-2: #c3c2b7;
     --texte-3: #a3a29a;
-    --accent: #ffffff;
+    /* Magenta plus lumineux pour rester lisible sur fond sombre (6,6:1) */
+    --accent: #ff6ec7;
     --accent-texte: #0b0b0b;
-    --accent-doux: #3a3a37;
-    --accent-actif: #ffffff;
-    --lien: #ffffff;
+    --accent-doux: #3d1733;
+    --accent-actif: #ff6ec7;
+    --lien: #ff6ec7;
     --positif: #3fc23f;
     --negatif: #ff8a8a;
     --serie-1: #3987e5;

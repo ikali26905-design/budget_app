@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <!-- Icône de l'app : trois barres de budget sur fond bleu (aucune police, rendu identique partout) -->
-  <rect width="512" height="512" rx="112" fill="#0b0b0b"/>
+  <rect width="512" height="512" rx="112" fill="#c2008f"/>
   <rect x="128" y="236" width="64" height="148" rx="16" fill="#ffffff" opacity="0.75"/>
   <rect x="224" y="148" width="64" height="236" rx="16" fill="#ffffff"/>
   <rect x="320" y="200" width="64" height="184" rx="16" fill="#ffffff" opacity="0.75"/>
