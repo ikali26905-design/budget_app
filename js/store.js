@@ -4,15 +4,15 @@
 // localStorage est synchrone. Ainsi, le jour où on remplace ce fichier par des appels
 // à une vraie base de données (forcément asynchrones), le reste de l'app ne change pas.
 
-const CLE_STOCKAGE = 'budget-app:donnees';
-export const VERSION_DONNEES = 2; // 2 = ajout de l'épargne (comptes + objectifs)
+import { ID_COMPTE_EPARGNE } from './calculs.js';
+import { TAUX_FRAIS_DEFAUT } from './pea.js';
 
-// Comptes d'épargne créés au premier lancement (et ajoutés aux données d'avant la version 2)
-const COMPTES_EPARGNE_PAR_DEFAUT = [
-  { id: 'livret-a', nom: 'Livret A', emoji: '🏦', type: 'epargne', couleur: 1 },
-  { id: 'projets', nom: 'Projets', emoji: '✈️', type: 'epargne', couleur: 2 },
-  { id: 'imprevus', nom: 'Imprévus', emoji: '🛟', type: 'epargne', couleur: 3 },
-];
+const CLE_STOCKAGE = 'budget-app:donnees';
+// 2 = ajout de l'épargne ; 3 = un seul compte d'épargne (+ le PEA)
+export const VERSION_DONNEES = 3;
+
+// L'unique compte d'épargne (le PEA a son propre compte, créé quand on active son suivi)
+const COMPTE_EPARGNE = { id: ID_COMPTE_EPARGNE, nom: 'Épargne', emoji: '🏦', type: 'epargne', couleur: 1 };
 
 // Catégories créées au premier lancement. « couleur » = numéro de teinte (1 à 8), voir style.css
 const CATEGORIES_PAR_DEFAUT = [
@@ -29,7 +29,7 @@ const CATEGORIES_PAR_DEFAUT = [
   { id: 'aides', nom: 'Aides (APL, CAF)', emoji: '🏛️', type: 'revenu', couleur: 3 },
   { id: 'famille', nom: 'Famille', emoji: '👪', type: 'revenu', couleur: 4 },
   { id: 'autre-revenu', nom: 'Autre revenu', emoji: '💰', type: 'revenu', couleur: 5 },
-  ...COMPTES_EPARGNE_PAR_DEFAUT,
+  COMPTE_EPARGNE,
 ];
 
 // Copie en mémoire des données, pour ne pas relire localStorage à chaque appel
@@ -62,17 +62,48 @@ function copier(objet) {
   return structuredClone(objet);
 }
 
-// Met à niveau des données d'une ancienne version (ou d'un import) vers la version actuelle
-function migrer(donnees) {
+// Met à niveau des données d'une ancienne version (ou d'un import) vers la version actuelle.
+// Exportée pour être testée ; ne touche pas au stockage.
+export function migrer(donnees) {
   // Les champs absents (ex. « objectifs » ou « soldesInitiaux » dans d'anciennes données) prennent leur valeur par défaut
   const resultat = { ...creerDonneesInitiales(), ...donnees, version: VERSION_DONNEES };
-  // Avant la version 2, il n'y avait pas d'épargne : on ajoute les comptes par défaut
-  if (!resultat.categories.some((c) => c.type === 'epargne')) {
-    const idsPris = new Set(resultat.categories.map((c) => c.id));
-    const comptes = COMPTES_EPARGNE_PAR_DEFAUT.map((c) => ({ ...c, id: idsPris.has(c.id) ? creerId() : c.id }));
-    resultat.categories = [...resultat.categories, ...comptes];
+  return centraliserEpargne(resultat);
+}
+
+// Garantit qu'il n'existe qu'UN compte d'épargne (« Épargne ») en plus du PEA.
+// Les anciens comptes (Livret A, Projets…) y sont fusionnés : mouvements et soldes de départ
+// sont transférés (aucun montant perdu), leurs objectifs sont supprimés.
+function centraliserEpargne(d) {
+  // Un compte nommé « PEA » créé à la main devient le PEA suivi (il ne doit pas être fusionné)
+  if (!d.pea) {
+    const pea = d.categories.find((c) => c.type === 'epargne' && c.nom.trim().toLowerCase() === 'pea');
+    if (pea) d.pea = { compteId: pea.id, dateOuverture: null, tauxFrais: TAUX_FRAIS_DEFAUT, releves: [] };
   }
-  return resultat;
+  if (!d.categories.some((c) => c.id === ID_COMPTE_EPARGNE)) {
+    // Placé avant les autres comptes d'épargne, pour qu'« Épargne » soit la première pastille
+    const position = d.categories.findIndex((c) => c.type === 'epargne');
+    const index = position === -1 ? d.categories.length : position;
+    d.categories = [...d.categories.slice(0, index), { ...COMPTE_EPARGNE }, ...d.categories.slice(index)];
+  }
+  const anciens = d.categories.filter((c) => c.type === 'epargne' && c.id !== ID_COMPTE_EPARGNE && c.id !== d.pea?.compteId);
+  if (anciens.length === 0) return d;
+
+  const ids = new Set(anciens.map((c) => c.id));
+  // Les versements, retraits et modèles mensuels passent sur le compte unique
+  for (const element of [...d.transactions, ...d.recurrentes]) {
+    if (ids.has(element.categorieId)) element.categorieId = ID_COMPTE_EPARGNE;
+  }
+  // Les soldes de départ s'additionnent
+  let soldeDepart = d.soldesInitiaux[ID_COMPTE_EPARGNE] ?? 0;
+  for (const id of ids) {
+    soldeDepart += d.soldesInitiaux[id] ?? 0;
+    delete d.soldesInitiaux[id];
+    delete d.objectifs[id];
+  }
+  if (soldeDepart > 0) d.soldesInitiaux[ID_COMPTE_EPARGNE] = soldeDepart;
+  delete d.objectifs[ID_COMPTE_EPARGNE]; // les objectifs sont à redéfinir sur le compte unique
+  d.categories = d.categories.filter((c) => !ids.has(c.id));
+  return d;
 }
 
 // Lit les données depuis localStorage (ou crée les données initiales)

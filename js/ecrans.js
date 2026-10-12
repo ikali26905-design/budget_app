@@ -12,7 +12,7 @@ import { finPeriode, bornesDebut } from './periodes.js';
 import {
   transactionsDuMois, calculerTotaux, calculerSoldeCumule, calculerTotalParCategorie,
   calculerEtatBudget, pourcentage, grouperParJour, categoriesUtilisees, compterUtilisations,
-  calculerSoldesEpargne, estEpargne, montantDebite,
+  calculerSoldesEpargne, estEpargne, montantDebite, ID_COMPTE_EPARGNE,
 } from './calculs.js';
 import { creerGraphiqueBarres, creerJauge, infosNiveau, creerBarreProgression, creerGraphiqueEvolution } from './charts.js';
 
@@ -412,7 +412,6 @@ export function rendreReglages(conteneur, { donnees, actions }) {
   remplir(conteneur,
     sectionCategories('Catégories de dépenses', 'depense', donnees, actions),
     sectionCategories('Catégories de revenus', 'revenu', donnees, actions),
-    sectionCategories('Comptes d’épargne', 'epargne', donnees, actions),
     sectionRecurrentes(donnees, actions),
     sectionDebutsMois(donnees, actions),
     sectionSauvegarde(actions),
@@ -467,17 +466,17 @@ function ligneCompte(compte, solde, soldeInitial, objectif, actions) {
         : creer('span', { class: 'lien-action' }, 'Indiquer le solde actuel')));
 }
 
-// Écran Épargne : total, boutons rapides, puis chaque compte avec son objectif
+// Écran Épargne : total, boutons rapides, le compte « Épargne » puis la section PEA
 export function rendreEpargne(conteneur, { donnees, mois, actions }) {
   const fin = finPeriode(mois, donnees.debutsMois);
   const soldes = calculerSoldesEpargne(donnees.transactions, { dateLimite: fin, soldesInitiaux: donnees.soldesInitiaux });
   const pea = donnees.pea;
-  // Le PEA a sa propre section : on le retire de la liste « Mes comptes »
-  const comptes = donnees.categories.filter((c) => c.type === 'epargne' && c.id !== pea?.compteId);
+  const compte = donnees.categories.find((c) => c.id === ID_COMPTE_EPARGNE);
+  const soldeCompte = soldes.get(ID_COMPTE_EPARGNE) ?? 0;
   const resume = pea ? resumerPea(pea, donnees.transactions, donnees.soldesInitiaux[pea.compteId] ?? 0, fin) : null;
-  // Total : comptes classiques + valeur réelle du PEA (ou ce qui y a été investi s'il n'y a pas encore de relevé)
+  // Total : compte épargne + valeur réelle du PEA (ou ce qui y a été investi s'il n'y a pas encore de relevé)
   const totalPea = resume ? (resume.valeur ?? resume.investi) : 0;
-  const total = comptes.reduce((s, c) => s + (soldes.get(c.id) ?? 0), 0) + totalPea;
+  const total = soldeCompte + totalPea;
   const totauxDuMois = calculerTotaux(transactionsDuMois(donnees.transactions, mois, donnees.debutsMois));
   // Message d'explication tant que l'épargne n'a jamais été utilisée
   const aucunMouvement = !donnees.transactions.some((t) => estEpargne(t.type)) && Object.keys(donnees.soldesInitiaux).length === 0;
@@ -485,10 +484,10 @@ export function rendreEpargne(conteneur, { donnees, mois, actions }) {
     carteTotalEpargne(total, totauxDuMois.epargne, totauxDuMois.frais, mois, resume?.plusValue?.montant ?? null, actions),
     aucunMouvement && creer('p', { class: 'aide aide--centre' },
       'Mets de l’argent de côté pour un projet ou les imprévus : il est déduit de ton solde du mois et s’accumule ici.'),
-    creer('h2', { class: 'titre-section' }, 'Mes comptes'),
+    creer('h2', { class: 'titre-section' }, 'Compte épargne'),
     creer('ul', { class: 'liste carte carte--liste' },
-      comptes.map((c) => ligneCompte(c, soldes.get(c.id) ?? 0, donnees.soldesInitiaux[c.id], donnees.objectifs[c.id], actions))),
-    creer('p', { class: 'aide aide--centre' }, 'Touche un compte pour indiquer ce qu’il contient déjà et son objectif. Ajoute ou supprime des comptes dans Réglages.'),
+      ligneCompte(compte, soldeCompte, donnees.soldesInitiaux[ID_COMPTE_EPARGNE], donnees.objectifs[ID_COMPTE_EPARGNE], actions)),
+    creer('p', { class: 'aide aide--centre' }, 'Touche le compte pour indiquer ce qu’il contient déjà et ton objectif.'),
     sectionPea(donnees, resume, actions),
   );
 }

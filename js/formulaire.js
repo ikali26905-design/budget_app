@@ -6,7 +6,7 @@ import { parserMontant, centimesVersSaisie, formaterMontant } from './money.js';
 import { aujourdhui, estDateValide, nomDuMois, dateLongue } from './dates.js';
 import { moisCommencantLe, bornesDebut } from './periodes.js';
 import { fraisDuVersement, TAUX_FRAIS_DEFAUT } from './pea.js';
-import { typeDeCategorie } from './calculs.js';
+import { typeDeCategorie, ID_COMPTE_EPARGNE } from './calculs.js';
 
 // Les trois grandes familles (aussi utilisées pour les catégories)
 const FAMILLES = [['depense', 'Dépense'], ['revenu', 'Revenu'], ['epargne', 'Épargne']];
@@ -59,6 +59,11 @@ function creerChampMontant(valeurInitiale, autofocus, { id = 'champ-montant', li
     }),
     creer('span', { class: 'champ-montant__devise', 'aria-hidden': 'true' }, '€'),
   );
+}
+
+// Catégorie présélectionnée : pour l'épargne, le compte « Épargne » (le PEA reste à un geste)
+function categorieParDefaut(famille) {
+  return famille === 'epargne' ? ID_COMPTE_EPARGNE : null;
 }
 
 // Crée la grille de pastilles de catégories pour une famille (« depense », « revenu », « epargne »)
@@ -160,7 +165,7 @@ export function ouvrirFormulaireTransaction({ categories, pea = null, transactio
     creerSelecteurType(famille),
     selecteurSens,
     creerChampMontant(initial.montant ? centimesVersSaisie(initial.montant) : '', !modification),
-    creerPastilles(categories, famille, initial.categorieId),
+    creerPastilles(categories, famille, initial.categorieId ?? categorieParDefaut(famille)),
     creer('p', { class: 'info-frais', 'aria-live': 'polite', hidden: true }),
     creerDateEtNote(initial.date, initial.note),
     creerCaseRecurrente(estRecurrente),
@@ -191,7 +196,7 @@ export function ouvrirFormulaireTransaction({ categories, pea = null, transactio
   formulaire.addEventListener('change', (evenement) => {
     const { name, value } = evenement.target;
     if (name === 'type') {
-      formulaire.querySelector('#pastilles').replaceWith(creerPastilles(categories, value, null));
+      formulaire.querySelector('#pastilles').replaceWith(creerPastilles(categories, value, categorieParDefaut(value)));
       selecteurSens.hidden = value !== 'epargne';
     }
     if (name === 'type' || name === 'sens') boutonValider.textContent = libelleBouton(modification, typeSaisi(formulaire));
@@ -285,7 +290,8 @@ export function ouvrirFormulaireCategorie({ type, nomExiste, surValider }) {
       creer('input', { type: 'radio', name: 'emoji', id: `emoji-${i}`, value: emoji, checked: i === 0 }),
       creer('label', { for: `emoji-${i}` }, emoji))));
   const formulaire = creer('form', { class: 'formulaire', novalidate: true },
-    creerSelecteurType(type, { libelle: 'Type de catégorie' }),
+    // Pas d'« Épargne » ici : il n'y a qu'un compte d'épargne (et le PEA), on n'en crée pas d'autres
+    creerSelecteurType(type, { options: FAMILLES.filter(([valeur]) => valeur !== 'epargne'), libelle: 'Type de catégorie' }),
     creer('div', { class: 'champ' },
       creer('label', { class: 'champ__label', for: 'champ-nom' }, 'Nom'),
       creer('input', { class: 'champ__input', id: 'champ-nom', name: 'nom', maxlength: 24, autocomplete: 'off', autofocus: true, placeholder: 'Ex. : Restaurants' })),
@@ -493,9 +499,9 @@ function parserPourcentage(texte) {
  * Ouvre la feuille « Paramètres du PEA » : date d'ouverture, montant investi avant l'app et frais de versement.
  * - pea : configuration actuelle, ou null pour activer le suivi
  * - investiDepart : montant déjà investi avant l'app (centimes ou null)
- * - surValider({ dateOuverture, investiDepart }) / surArreter() : fonctions async fournies par app.js
+ * - surValider({ dateOuverture, investiDepart, tauxFrais }) / surSupprimer() : fonctions async fournies par app.js
  */
-export function ouvrirFormulaireParametresPea({ pea, investiDepart, surValider, surArreter }) {
+export function ouvrirFormulaireParametresPea({ pea, investiDepart, surValider, surSupprimer }) {
   const boutonValider = creer('button', { type: 'submit', class: 'bouton bouton--plein' }, pea ? 'Enregistrer' : 'Commencer le suivi');
   const formulaire = creer('form', { class: 'formulaire', novalidate: true },
     creer('div', { class: 'champ' },
@@ -514,7 +520,7 @@ export function ouvrirFormulaireParametresPea({ pea, investiDepart, surValider, 
     creer('p', { class: 'erreur', role: 'alert', hidden: true }),
     creer('div', { class: 'feuille__actions' },
       boutonValider,
-      pea && creer('button', { type: 'button', class: 'bouton bouton--contour-danger bouton--plein', 'data-action': 'arreter' }, 'Arrêter le suivi du PEA')),
+      pea && creer('button', { type: 'button', class: 'bouton bouton--contour-danger bouton--plein', 'data-action': 'supprimer' }, 'Supprimer le PEA')),
   );
   formulaire.addEventListener('input', () => {
     formulaire.querySelector('.erreur').hidden = true;
@@ -542,6 +548,6 @@ export function ouvrirFormulaireParametresPea({ pea, investiDepart, surValider, 
     boutonValider.disabled = false;
     if (reussi !== false) fermerFeuille();
   });
-  formulaire.querySelector('[data-action="arreter"]')?.addEventListener('click', () => surArreter());
+  formulaire.querySelector('[data-action="supprimer"]')?.addEventListener('click', () => surSupprimer());
   ouvrirFeuille(pea ? 'Paramètres du PEA' : 'Suivre mon PEA', formulaire);
 }

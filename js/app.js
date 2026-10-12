@@ -374,7 +374,7 @@ function ouvrirParametresPea() {
       afficherToast(pea ? 'PEA mis à jour' : 'Suivi du PEA activé');
       await rafraichir();
     }),
-    surArreter: arreterSuiviPea,
+    surSupprimer: supprimerPea,
   });
 }
 
@@ -387,15 +387,27 @@ async function compteDuPea() {
   return compte.id;
 }
 
-// Arrête le suivi : les relevés disparaissent, le compte et ses versements restent dans « Mes comptes »
-async function arreterSuiviPea() {
+// Supprime le PEA (compte, relevés, paramètres), seulement s'il n'a aucun versement ni retrait
+async function supprimerPea() {
+  const { compteId } = etat.donnees.pea;
+  const utilisations = compterUtilisations(compteId, etat.donnees);
+  if (utilisations.total > 0) {
+    await informer('Impossible de supprimer le PEA',
+      `Il a ${utilisations.total} mouvement${utilisations.total > 1 ? 's' : ''} (versements, retraits ou transactions mensuelles). Supprime-les d’abord dans l’Historique ou les Réglages.`);
+    return;
+  }
   const ok = await demanderConfirmation({
-    titre: 'Arrêter le suivi du PEA ?',
-    message: 'Les relevés de valeur et la date d’ouverture seront supprimés. Le compte « PEA » et ses versements restent dans tes comptes d’épargne.',
-    libelleValider: 'Arrêter le suivi',
+    titre: 'Supprimer le PEA ?',
+    message: 'Ses relevés de valeur, sa date d’ouverture et son montant investi de départ seront supprimés.',
+    libelleValider: 'Supprimer',
     danger: true,
   });
-  if (ok && await enregistrerPea(null, 'Suivi du PEA arrêté')) fermerFeuille();
+  // supprimerCategorie efface aussi la configuration du PEA, son solde de départ et son objectif
+  if (ok && await executer(() => store.supprimerCategorie(compteId))) {
+    fermerFeuille();
+    afficherToast('PEA supprimé');
+    await rafraichir();
+  }
 }
 
 /* ===================== Début des mois ===================== */
@@ -448,7 +460,7 @@ function ouvrirAjoutCategorie(type) {
     surValider: (valeurs) => executer(async () => {
       const couleur = choisirCouleur(etat.donnees.categories, valeurs.type);
       await store.ajouterCategorie({ ...valeurs, couleur });
-      afficherToast(valeurs.type === 'epargne' ? 'Compte ajouté' : 'Catégorie ajoutée');
+      afficherToast('Catégorie ajoutée');
       await rafraichir();
     }),
   });
@@ -476,7 +488,7 @@ async function supprimerCategorie(categorie) {
   }
   const memeType = etat.donnees.categories.filter((c) => c.type === categorie.type);
   if (memeType.length === 1) {
-    const quoi = { depense: 'une catégorie de dépenses', revenu: 'une catégorie de revenus', epargne: 'un compte d’épargne' }[categorie.type];
+    const quoi = categorie.type === 'depense' ? 'une catégorie de dépenses' : 'une catégorie de revenus';
     await informer('Impossible de supprimer', `Il faut garder au moins ${quoi}.`);
     return;
   }

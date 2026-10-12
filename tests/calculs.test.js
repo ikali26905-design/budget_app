@@ -309,3 +309,44 @@ test('CSV et import : frais de versement', () => {
   fichier.transactions[0].frais = -3; // invalide : ignoré
   assert.equal('frais' in io.validerImport(fichier).donnees.transactions[0], false);
 });
+
+const store = await import(R + 'store.js');
+test('migration : un seul compte « Épargne » (+ PEA), sans perdre d’argent', () => {
+  const anciennes = {
+    version: 2,
+    categories: [
+      { id: 'courses', nom: 'Courses', emoji: '🛒', type: 'depense', couleur: 2 },
+      { id: 'job', nom: 'Job', emoji: '💼', type: 'revenu', couleur: 1 },
+      { id: 'livret-a', nom: 'Livret A', emoji: '🏦', type: 'epargne', couleur: 1 },
+      { id: 'projets', nom: 'Projets', emoji: '✈️', type: 'epargne', couleur: 2 },
+      { id: 'x-pea', nom: 'PEA', emoji: '📈', type: 'epargne', couleur: 3 },
+    ],
+    transactions: [
+      { id: 'a', type: 'epargne', montant: 10000, categorieId: 'livret-a', date: '2026-10-01', creeLe: 1 },
+      { id: 'b', type: 'retrait', montant: 2000, categorieId: 'projets', date: '2026-10-02', creeLe: 2 },
+      { id: 'c', type: 'epargne', montant: 5000, categorieId: 'x-pea', date: '2026-10-03', creeLe: 3 },
+    ],
+    recurrentes: [{ id: 'r', type: 'epargne', montant: 3000, categorieId: 'projets', jour: 5, note: '', dernierMois: '2026-10' }],
+    budgets: {},
+    budgetGlobal: null,
+    objectifs: { 'livret-a': 100000, projets: 50000 },
+    soldesInitiaux: { 'livret-a': 120000, projets: 30000 },
+  };
+  const avant = c.calculerSoldesEpargne(anciennes.transactions, { soldesInitiaux: anciennes.soldesInitiaux });
+  const totalAvant = (avant.get('livret-a') ?? 0) + (avant.get('projets') ?? 0);
+  const d = store.migrer(structuredClone(anciennes));
+  assert.deepEqual(d.categories.filter((x) => x.type === 'epargne').map((x) => x.nom).sort(), ['PEA', 'Épargne']);
+  assert.equal(d.pea.compteId, 'x-pea'); // le compte « PEA » existant devient le PEA suivi
+  assert.deepEqual(d.transactions.map((t) => t.categorieId), ['epargne', 'epargne', 'x-pea']);
+  assert.equal(d.recurrentes[0].categorieId, 'epargne');
+  assert.deepEqual(d.soldesInitiaux, { epargne: 150000 });
+  assert.deepEqual(d.objectifs, {});
+  const apres = c.calculerSoldesEpargne(d.transactions, { soldesInitiaux: d.soldesInitiaux });
+  assert.equal(apres.get('epargne'), totalAvant); // aucun euro perdu
+  // Idempotent : migrer à nouveau ne change rien
+  assert.deepEqual(store.migrer(structuredClone(d)), d);
+  // Données neuves : Épargne seul, pas de PEA
+  const neuves = store.migrer({});
+  assert.deepEqual(neuves.categories.filter((x) => x.type === 'epargne').map((x) => x.id), ['epargne']);
+  assert.equal(neuves.pea, null);
+});

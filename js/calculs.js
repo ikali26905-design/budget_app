@@ -5,6 +5,9 @@
 import { moisDe, decalerMois, dateDansMois } from './dates.js';
 import { moisBudgetaire, finPeriode } from './periodes.js';
 
+// Identifiant du compte d'épargne unique (le PEA, lui, a son propre compte : voir pea.js)
+export const ID_COMPTE_EPARGNE = 'epargne';
+
 // Seuil (en %) à partir duquel une barre de budget passe à l'orange
 export const SEUIL_ALERTE = 80;
 
