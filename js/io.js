@@ -153,6 +153,19 @@ function montantsDesComptes(objet, typesCategories) {
   return resultat;
 }
 
+// Valide le suivi du PEA : il doit viser un compte d'épargne existant ; les relevés invalides sont ignorés
+function nettoyerPea(pea, typesCategories) {
+  if (!pea || typesCategories.get(pea.compteId) !== 'epargne') return null;
+  const releves = (Array.isArray(pea.releves) ? pea.releves : [])
+    .filter((r) => r && estDateValide(r.date) && Number.isSafeInteger(r.valeur) && r.valeur >= 0 && r.valeur <= MONTANT_MAX)
+    .map((r) => ({ date: r.date, valeur: r.valeur }));
+  return {
+    compteId: pea.compteId,
+    dateOuverture: estDateValide(pea.dateOuverture) ? pea.dateOuverture : null,
+    releves,
+  };
+}
+
 // Garde les débuts de mois valides : une vraie date, qui correspond bien au mois indiqué
 function nettoyerDebutsMois(objet) {
   const resultat = {};
@@ -196,8 +209,9 @@ export function validerImport(objet) {
     const objectifs = montantsDesComptes(objet.objectifs, typesCategories);
     const soldesInitiaux = montantsDesComptes(objet.soldesInitiaux, typesCategories);
     const debutsMois = nettoyerDebutsMois(objet.debutsMois);
+    const pea = nettoyerPea(objet.pea, typesCategories);
 
-    return { ok: true, donnees: { categories, transactions, recurrentes, budgets, budgetGlobal, objectifs, soldesInitiaux, debutsMois } };
+    return { ok: true, donnees: { categories, transactions, recurrentes, budgets, budgetGlobal, objectifs, soldesInitiaux, debutsMois, pea } };
   } catch (erreur) {
     if (erreur instanceof ErreurImport) return { ok: false, erreur: erreur.message };
     throw erreur;

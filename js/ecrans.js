@@ -6,14 +6,15 @@
 
 import { creer, remplir, etatVide, badgeCategorie, icone } from './ui.js';
 import { formaterMontant, formaterMontantCourt, formaterMontantSigne } from './money.js';
-import { nomDuMoisSeul, nomDuMois, deMois, libelleJour, aujourdhui, decalerMois, dateLongue } from './dates.js';
+import { nomDuMoisSeul, nomDuMois, deMois, libelleJour, aujourdhui, decalerMois, dateLongue, dateCourte, ecartJours } from './dates.js';
+import { resumerPea, serieEvolution, rappelNecessaire, avantageFiscal, trierReleves } from './pea.js';
 import { finPeriode, bornesDebut } from './periodes.js';
 import {
   transactionsDuMois, calculerTotaux, calculerSoldeCumule, calculerTotalParCategorie,
   calculerEtatBudget, pourcentage, grouperParJour, categoriesUtilisees, compterUtilisations,
   calculerSoldesEpargne, estEpargne,
 } from './calculs.js';
-import { creerGraphiqueBarres, creerJauge, infosNiveau, creerBarreProgression } from './charts.js';
+import { creerGraphiqueBarres, creerJauge, infosNiveau, creerBarreProgression, creerGraphiqueEvolution } from './charts.js';
 
 /* ===================== Outils communs ===================== */
 
@@ -329,7 +330,8 @@ function texteUtilisation(utilisations) {
 
 // Liste des catégories d'un type, avec bouton de suppression et bouton d'ajout
 function sectionCategories(titre, type, donnees, actions) {
-  const categories = donnees.categories.filter((c) => c.type === type);
+  // Le compte PEA se gère dans sa section de l'onglet Épargne
+  const categories = donnees.categories.filter((c) => c.type === type && c.id !== donnees.pea?.compteId);
   return [
     creer('h2', { class: 'titre-section' }, titre),
     creer('div', { class: 'carte carte--liste' },
@@ -419,7 +421,7 @@ export function rendreReglages(conteneur, { donnees, actions }) {
 /* ===================== Épargne ===================== */
 
 // Carte principale : total épargné (tous comptes) et mouvement net du mois
-function carteTotalEpargne(total, netDuMois, mois, actions) {
+function carteTotalEpargne(total, netDuMois, mois, plusValuePea, actions) {
   let resume = `Rien mis de côté en ${nomDuMoisSeul(mois)}`;
   if (netDuMois > 0) resume = `+${formaterMontant(netDuMois)} mis de côté ce mois-ci`;
   if (netDuMois < 0) resume = `${formaterMontant(-netDuMois)} retirés ce mois-ci`;
@@ -427,6 +429,8 @@ function carteTotalEpargne(total, netDuMois, mois, actions) {
     creer('p', { class: 'carte-solde__label' }, `Épargne totale fin ${nomDuMoisSeul(mois)}`),
     creer('p', { class: 'carte-solde__montant montant' }, formaterMontant(total)),
     creer('p', { class: 'carte-solde__message' }, resume),
+    plusValuePea !== null && creer('p', { class: 'aide' },
+      `dont ${texteMontantSigne(plusValuePea)} de ${plusValuePea >= 0 ? 'plus' : 'moins'}-value latente sur le PEA`),
     creer('div', { class: 'actions-ligne' },
       creer('button', { type: 'button', class: 'bouton', onclick: () => actions.ajouterEpargne('epargne') }, 'Mettre de côté'),
       creer('button', { type: 'button', class: 'bouton bouton--secondaire', onclick: () => actions.ajouterEpargne('retrait') }, 'Retirer')),
@@ -462,19 +466,132 @@ function ligneCompte(compte, solde, soldeInitial, objectif, actions) {
 
 // Écran Épargne : total, boutons rapides, puis chaque compte avec son objectif
 export function rendreEpargne(conteneur, { donnees, mois, actions }) {
-  const soldes = calculerSoldesEpargne(donnees.transactions, { dateLimite: finPeriode(mois, donnees.debutsMois), soldesInitiaux: donnees.soldesInitiaux });
-  const comptes = donnees.categories.filter((c) => c.type === 'epargne');
-  const total = comptes.reduce((s, c) => s + (soldes.get(c.id) ?? 0), 0);
+  const fin = finPeriode(mois, donnees.debutsMois);
+  const soldes = calculerSoldesEpargne(donnees.transactions, { dateLimite: fin, soldesInitiaux: donnees.soldesInitiaux });
+  const pea = donnees.pea;
+  // Le PEA a sa propre section : on le retire de la liste « Mes comptes »
+  const comptes = donnees.categories.filter((c) => c.type === 'epargne' && c.id !== pea?.compteId);
+  const resume = pea ? resumerPea(pea, donnees.transactions, donnees.soldesInitiaux[pea.compteId] ?? 0, fin) : null;
+  // Total : comptes classiques + valeur réelle du PEA (ou ce qui y a été investi s'il n'y a pas encore de relevé)
+  const totalPea = resume ? (resume.valeur ?? resume.investi) : 0;
+  const total = comptes.reduce((s, c) => s + (soldes.get(c.id) ?? 0), 0) + totalPea;
   const netDuMois = calculerTotaux(transactionsDuMois(donnees.transactions, mois, donnees.debutsMois)).epargne;
   // Message d'explication tant que l'épargne n'a jamais été utilisée
   const aucunMouvement = !donnees.transactions.some((t) => estEpargne(t.type)) && Object.keys(donnees.soldesInitiaux).length === 0;
   remplir(conteneur,
-    carteTotalEpargne(total, netDuMois, mois, actions),
+    carteTotalEpargne(total, netDuMois, mois, resume?.plusValue?.montant ?? null, actions),
     aucunMouvement && creer('p', { class: 'aide aide--centre' },
       'Mets de l’argent de côté pour un projet ou les imprévus : il est déduit de ton solde du mois et s’accumule ici.'),
     creer('h2', { class: 'titre-section' }, 'Mes comptes'),
     creer('ul', { class: 'liste carte carte--liste' },
       comptes.map((c) => ligneCompte(c, soldes.get(c.id) ?? 0, donnees.soldesInitiaux[c.id], donnees.objectifs[c.id], actions))),
     creer('p', { class: 'aide aide--centre' }, 'Touche un compte pour indiquer ce qu’il contient déjà et son objectif. Ajoute ou supprime des comptes dans Réglages.'),
+    sectionPea(donnees, resume, actions),
   );
+}
+
+/* ===================== Section PEA ===================== */
+
+// « +240,00 € » ou « −150,00 € »
+function texteMontantSigne(centimes) {
+  return (centimes >= 0 ? '+' : '−') + formaterMontant(Math.abs(centimes));
+}
+
+// Pourcentage en dixièmes : 76 → « +7,6 % »
+function textePourcentDixiemes(pourMille) {
+  const valeur = (Math.abs(pourMille) / 10).toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  return `${pourMille >= 0 ? '+' : '−'}${valeur} %`;
+}
+
+// Durée en mois lisible : 29 → « 2 ans et 5 mois »
+function texteDuree(mois) {
+  const annees = Math.floor(mois / 12);
+  const reste = mois % 12;
+  const morceaux = [];
+  if (annees > 0) morceaux.push(`${annees} an${annees > 1 ? 's' : ''}`);
+  if (reste > 0) morceaux.push(`${reste} mois`);
+  return morceaux.join(' et ') || 'moins d’un mois';
+}
+
+// Ligne « avantage fiscal » : compte à rebours des 5 ans, ou avantage acquis
+function ligneAvantageFiscal(dateOuverture) {
+  if (!dateOuverture) return null;
+  const avantage = avantageFiscal(dateOuverture, aujourdhui());
+  return creer('p', { class: `pea__fiscal ${avantage.acquis ? 'pea__fiscal--acquis' : ''}` },
+    avantage.acquis
+      ? `✓ Plus de 5 ans : avantage fiscal acquis depuis le ${dateLongue(avantage.dateAcquisition)}`
+      : `⏳ Avantage fiscal dans ${texteDuree(avantage.moisRestants)} (${dateLongue(avantage.dateAcquisition)} ${avantage.dateAcquisition.slice(0, 4)})`);
+}
+
+// Chiffres clés : valeur, investi, plus-value
+function chiffresPea(resume) {
+  const pv = resume.plusValue;
+  return creer('dl', { class: 'pea__chiffres' },
+    creer('div', {}, creer('dt', {}, 'Valeur'),
+      creer('dd', { class: 'pea__valeur montant' }, resume.valeur === null ? '—' : formaterMontant(resume.valeur))),
+    creer('div', {}, creer('dt', {}, 'Investi'), creer('dd', { class: 'montant' }, formaterMontant(resume.investi))),
+    creer('div', {}, creer('dt', {}, pv && pv.montant < 0 ? 'Moins-value' : 'Plus-value'),
+      creer('dd', { class: `montant ${pv ? (pv.montant >= 0 ? 'montant--revenu' : 'montant--negatif') : ''}` },
+        pv ? texteMontantSigne(pv.montant) : '—',
+        pv?.pourMille !== null && pv?.pourMille !== undefined && creer('span', { class: 'pea__pourcent' }, ` (${textePourcentDixiemes(pv.pourMille)})`))),
+  );
+}
+
+// Mention du dernier relevé, mise en avant s'il faut refaire le point
+function ligneDernierReleve(pea, resume) {
+  const enRetard = rappelNecessaire(pea.releves, aujourdhui());
+  if (!resume.releve) {
+    return creer('p', { class: 'pea__rappel pea__rappel--actif' }, 'Aucun relevé : indique la valeur actuelle de ton PEA pour voir sa plus-value.');
+  }
+  const jours = ecartJours(resume.releve.date, aujourdhui());
+  return creer('p', { class: `pea__rappel ${enRetard ? 'pea__rappel--actif' : ''}` },
+    enRetard
+      ? `Fais le point : dernier relevé il y a ${jours} jours (${dateLongue(resume.releve.date)}).`
+      : `Dernier relevé le ${dateLongue(resume.releve.date)}${resume.valeur !== resume.releve.valeur ? ' (valeur estimée avec tes versements et retraits depuis)' : ''}.`);
+}
+
+// Historique des relevés, repliable (balise <details> native)
+function historiqueReleves(pea, actions) {
+  const releves = trierReleves(pea.releves).reverse();
+  if (releves.length === 0) return null;
+  return creer('details', { class: 'pea__historique' },
+    creer('summary', {}, `Historique des relevés (${releves.length})`),
+    creer('ul', { class: 'liste' }, releves.map((r) => creer('li', {},
+      creer('button', { type: 'button', class: 'ligne-releve', onclick: () => actions.modifierReleve(r) },
+        creer('span', {}, dateLongue(r.date), ' ', r.date.slice(0, 4)),
+        creer('strong', { class: 'montant' }, formaterMontant(r.valeur)))))));
+}
+
+// Section PEA complète (ou invitation à l'activer)
+function sectionPea(donnees, resume, actions) {
+  const pea = donnees.pea;
+  if (!pea) {
+    return [
+      creer('h2', { class: 'titre-section' }, 'PEA'),
+      creer('div', { class: 'carte carte-nouveau-mois' },
+        creer('p', {}, creer('strong', {}, '📈 Suis ton PEA'), creer('br'),
+          creer('span', { class: 'aide' }, 'Relève sa valeur chaque mois pour voir ta plus-value et son évolution.')),
+        creer('button', { type: 'button', class: 'bouton bouton--secondaire bouton--plein', onclick: actions.parametresPea }, 'Ajouter mon PEA')),
+    ];
+  }
+  const serie = serieEvolution(pea, donnees.transactions, donnees.soldesInitiaux[pea.compteId] ?? 0);
+  return [
+    creer('h2', { class: 'titre-section' }, '📈 PEA'),
+    creer('div', { class: 'carte pea' },
+      chiffresPea(resume),
+      ligneDernierReleve(pea, resume),
+      creer('button', { type: 'button', class: 'bouton bouton--plein', onclick: () => actions.ajouterReleve() }, 'Faire le point'),
+      ligneAvantageFiscal(pea.dateOuverture),
+      serie.length >= 2
+        ? creerGraphiqueEvolution(serie, { formaterMontant: formaterMontantCourtArrondi, formaterDate: dateCourte })
+        : creer('p', { class: 'aide' }, 'Le graphique d’évolution apparaîtra à partir de 2 relevés.'),
+      historiqueReleves(pea, actions),
+      creer('button', { type: 'button', class: 'lien-discret pea__parametres', onclick: actions.parametresPea }, 'Paramètres du PEA'),
+    ),
+  ];
+}
+
+// Montant arrondi à l'euro pour les échelles du graphique : 324 050 → « 3 241 € »
+function formaterMontantCourtArrondi(centimes) {
+  return formaterMontantCourt(Math.round(centimes / 100) * 100);
 }

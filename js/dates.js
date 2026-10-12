@@ -80,6 +80,18 @@ export function decalerJour(date, n) {
   return d.toISOString().slice(0, 10);
 }
 
+// Nombre de jours entre deux dates (positif si fin est après debut)
+export function ecartJours(debut, fin) {
+  return Math.round((versDateUTC(fin) - versDateUTC(debut)) / 86_400_000);
+}
+
+// Nombre de mois entiers écoulés entre deux dates : (« 2021-03-12 », « 2026-03-11 ») → 59
+export function moisEcoules(debut, fin) {
+  const [a1, m1, j1] = debut.split('-').map(Number);
+  const [a2, m2, j2] = fin.split('-').map(Number);
+  return (a2 - a1) * 12 + (m2 - m1) - (j2 < j1 ? 1 : 0);
+}
+
 // Date courte : « 2026-09-28 » → « 28 sept. »
 export function dateCourte(date) {
   return formateurDateCourte.format(versDateUTC(date));

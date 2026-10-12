@@ -47,6 +47,7 @@ function creerDonneesInitiales() {
     objectifs: {}, // objectif de chaque compte d'épargne, en centimes
     soldesInitiaux: {}, // ce que contenait chaque compte avant d'utiliser l'app, en centimes
     debutsMois: {}, // jour de début des mois décalés (ex. paye) : { "2026-11": "2026-10-28" }
+    pea: null, // suivi du PEA : { compteId, dateOuverture, releves: [{ date, valeur }] }
   };
 }
 
@@ -224,6 +225,7 @@ export async function supprimerCategorie(id) {
     delete d.budgets[id];
     delete d.objectifs[id];
     delete d.soldesInitiaux[id];
+    if (d.pea?.compteId === id) d.pea = null;
   });
 }
 
@@ -251,6 +253,15 @@ export async function definirCompte(compteId, { soldeInitial, objectif }) {
     else d.soldesInitiaux[compteId] = soldeInitial;
     if (objectif === null) delete d.objectifs[compteId];
     else d.objectifs[compteId] = objectif;
+  });
+}
+
+/* ===================== PEA ===================== */
+
+// Enregistre la configuration du PEA (compte suivi, date d'ouverture, relevés), ou l'efface si null
+export async function definirPea(pea) {
+  return modifier((d) => {
+    d.pea = pea;
   });
 }
 

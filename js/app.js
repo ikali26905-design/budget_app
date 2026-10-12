@@ -17,8 +17,9 @@ import { formaterMontant, formaterMontantSigne } from './money.js';
 import { afficherToast, informer, demanderConfirmation, fermerFeuille } from './ui.js';
 import {
   ouvrirFormulaireTransaction, ouvrirFormulaireMontantCible, ouvrirFormulaireCategorie, ouvrirFormulaireCompte,
-  ouvrirFormulaireDebutMois,
+  ouvrirFormulaireDebutMois, ouvrirFormulaireReleve, ouvrirFormulaireParametresPea,
 } from './formulaire.js';
+import { calculerValeurEstimee, trierReleves } from './pea.js';
 import { rendreAccueil, rendreHistorique, rendreEpargne, rendreBudgets, rendreReglages } from './ecrans.js';
 import { genererJSON, genererCSV, telecharger, nomFichier, validerImport } from './io.js';
 
@@ -131,8 +132,14 @@ const MESSAGES = {
 // (idExclu : en modification, on ne compte pas l'ancienne version de la transaction)
 function verifierRetrait(valeurs, idExclu = null) {
   if (valeurs.type !== 'retrait') return null;
-  const disponible = calculerSoldesEpargne(etat.donnees.transactions, { idExclu, soldesInitiaux: etat.donnees.soldesInitiaux })
+  let disponible = calculerSoldesEpargne(etat.donnees.transactions, { idExclu, soldesInitiaux: etat.donnees.soldesInitiaux })
     .get(valeurs.categorieId) ?? 0;
+  // Pour le PEA, on peut retirer jusqu'à sa valeur réelle (plus-values comprises) si elle est connue
+  const pea = etat.donnees.pea;
+  if (pea?.compteId === valeurs.categorieId) {
+    const valeur = calculerValeurEstimee(pea, etat.donnees.transactions.filter((t) => t.id !== idExclu));
+    if (valeur !== null) disponible = valeur;
+  }
   if (valeurs.montant <= disponible) return null;
   const compte = etat.donnees.categories.find((c) => c.id === valeurs.categorieId);
   return `Il n’y a que ${formaterMontant(Math.max(disponible, 0))} sur « ${compte.nom} ». Tu ne peux pas retirer plus.`;
@@ -300,6 +307,86 @@ function ouvrirCompte(compteId) {
       });
     },
   });
+}
+
+/* ===================== PEA ===================== */
+
+// Enregistre une nouvelle configuration du PEA puis redessine
+function enregistrerPea(pea, message) {
+  return executer(async () => {
+    await store.definirPea(pea);
+    afficherToast(message);
+    await rafraichir();
+  });
+}
+
+// Remplace (ou ajoute) le relevé d'une date ; ancienneDate = date du relevé modifié, s'il a changé de date
+function relevesAvec(releve, ancienneDate = null) {
+  const autres = etat.donnees.pea.releves.filter((r) => r.date !== releve.date && r.date !== ancienneDate);
+  return trierReleves([...autres, releve]);
+}
+
+// Ouvre la feuille « Faire le point » (nouveau relevé, date du jour)
+function ajouterReleve() {
+  ouvrirFormulaireReleve({
+    surValider: (releve) => enregistrerPea({ ...etat.donnees.pea, releves: relevesAvec(releve) }, 'Relevé enregistré'),
+  });
+}
+
+// Ouvre un relevé existant pour le modifier ou le supprimer
+function modifierReleve(releve) {
+  ouvrirFormulaireReleve({
+    releve,
+    surValider: (nouveau) => enregistrerPea({ ...etat.donnees.pea, releves: relevesAvec(nouveau, releve.date) }, 'Relevé modifié'),
+    surSupprimer: async () => {
+      const ok = await demanderConfirmation({
+        titre: 'Supprimer ce relevé ?',
+        message: `Relevé du ${dateLongue(releve.date)} : ${formaterMontant(releve.valeur)}.`,
+        libelleValider: 'Supprimer',
+        danger: true,
+      });
+      if (!ok) return;
+      const releves = etat.donnees.pea.releves.filter((r) => r.date !== releve.date);
+      if (await enregistrerPea({ ...etat.donnees.pea, releves }, 'Relevé supprimé')) fermerFeuille();
+    },
+  });
+}
+
+// Ouvre les paramètres du PEA (ou l'activation du suivi s'il n'existe pas encore)
+function ouvrirParametresPea() {
+  const pea = etat.donnees.pea;
+  ouvrirFormulaireParametresPea({
+    pea,
+    investiDepart: pea ? (etat.donnees.soldesInitiaux[pea.compteId] ?? null) : null,
+    surValider: ({ dateOuverture, investiDepart }) => executer(async () => {
+      const compteId = pea ? pea.compteId : await compteDuPea();
+      await store.definirCompte(compteId, { soldeInitial: investiDepart, objectif: etat.donnees.objectifs[compteId] ?? null });
+      await store.definirPea({ compteId, dateOuverture, releves: pea?.releves ?? [] });
+      afficherToast(pea ? 'PEA mis à jour' : 'Suivi du PEA activé');
+      await rafraichir();
+    }),
+    surArreter: arreterSuiviPea,
+  });
+}
+
+// Compte d'épargne utilisé pour le PEA : un compte « PEA » existant, sinon on le crée
+async function compteDuPea() {
+  const existant = etat.donnees.categories.find((c) => c.type === 'epargne' && c.nom.trim().toLowerCase() === 'pea');
+  if (existant) return existant.id;
+  const couleur = choisirCouleur(etat.donnees.categories, 'epargne');
+  const compte = await store.ajouterCategorie({ nom: 'PEA', emoji: '📈', type: 'epargne', couleur });
+  return compte.id;
+}
+
+// Arrête le suivi : les relevés disparaissent, le compte et ses versements restent dans « Mes comptes »
+async function arreterSuiviPea() {
+  const ok = await demanderConfirmation({
+    titre: 'Arrêter le suivi du PEA ?',
+    message: 'Les relevés de valeur et la date d’ouverture seront supprimés. Le compte « PEA » et ses versements restent dans tes comptes d’épargne.',
+    libelleValider: 'Arrêter le suivi',
+    danger: true,
+  });
+  if (ok && await enregistrerPea(null, 'Suivi du PEA arrêté')) fermerFeuille();
 }
 
 /* ===================== Début des mois ===================== */
@@ -504,6 +591,9 @@ const actions = {
   ajouterEpargne: ouvrirAjout,
   modifierCompte: ouvrirCompte,
   commencerMois: ouvrirDebutMois,
+  ajouterReleve,
+  modifierReleve,
+  parametresPea: ouvrirParametresPea,
   modifierDebutMois,
   supprimerDebutMois,
   ajouterCategorie: ouvrirAjoutCategorie,

@@ -5,7 +5,7 @@
 //  - hors ligne (ou réseau trop lent), on sert la copie gardée en cache.
 // Avantage : pas besoin de vider le cache à la main pendant le développement.
 
-const VERSION = 'v3';
+const VERSION = 'v4';
 const NOM_CACHE = `mon-budget-${VERSION}`;
 const DELAI_RESEAU_MS = 3000; // au-delà, on considère le réseau comme indisponible
 
@@ -26,6 +26,7 @@ const FICHIERS_APP = [
   './js/formulaire.js',
   './js/io.js',
   './js/periodes.js',
+  './js/pea.js',
   './icons/icon.svg',
   './icons/icon-180.png',
   './icons/icon-192.png',

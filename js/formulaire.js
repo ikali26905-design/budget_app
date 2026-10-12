@@ -418,3 +418,91 @@ export function ouvrirFormulaireDebutMois({ date, mois = null, surValider }) {
 
   ouvrirFeuille(mois ? `${nomDuMois(mois)} : début du mois` : 'Début d’un mois', formulaire);
 }
+
+/**
+ * Ouvre la feuille « Relevé du PEA » : la valeur du PEA à une date (aujourd'hui par défaut).
+ * - releve : relevé à modifier ({ date, valeur }) ou null pour un nouveau
+ * - surValider({ date, valeur }) / surSupprimer() : fonctions async fournies par app.js
+ */
+export function ouvrirFormulaireReleve({ releve = null, surValider, surSupprimer }) {
+  const boutonValider = creer('button', { type: 'submit', class: 'bouton bouton--plein' }, 'Enregistrer le relevé');
+  const formulaire = creer('form', { class: 'formulaire', novalidate: true },
+    creerChampMontant(releve ? centimesVersSaisie(releve.valeur) : '', true, { id: 'champ-valeur', libelle: 'Valeur du PEA' }),
+    creer('p', { class: 'aide aide--sous-champ' }, 'Le montant total affiché par ta banque ou ton courtier (titres + liquidités).'),
+    creer('div', { class: 'champ' },
+      creer('label', { class: 'champ__label', for: 'champ-date-releve' }, 'Date du relevé'),
+      creer('input', { class: 'champ__input', type: 'date', id: 'champ-date-releve', value: releve?.date ?? aujourdhui(), required: true })),
+    creer('p', { class: 'erreur', role: 'alert', hidden: true }),
+    creer('div', { class: 'feuille__actions' },
+      boutonValider,
+      releve && creer('button', { type: 'button', class: 'bouton bouton--contour-danger bouton--plein', 'data-action': 'supprimer' }, 'Supprimer ce relevé')),
+  );
+  formulaire.addEventListener('input', () => {
+    formulaire.querySelector('.erreur').hidden = true;
+    formulaire.querySelector('[aria-invalid]')?.removeAttribute('aria-invalid');
+  });
+  formulaire.addEventListener('submit', async (evenement) => {
+    evenement.preventDefault();
+    const valeur = parserMontant(formulaire.querySelector('#champ-valeur').value);
+    const date = formulaire.querySelector('#champ-date-releve').value;
+    if (valeur === null) {
+      afficherErreur(formulaire, { erreur: 'Saisis la valeur du PEA, par exemple 3 240,50.', champ: 'champ-valeur' });
+      return;
+    }
+    if (!estDateValide(date) || date > aujourdhui()) {
+      afficherErreur(formulaire, { erreur: 'Choisis une date valide, qui n’est pas dans le futur.', champ: 'champ-date-releve' });
+      return;
+    }
+    boutonValider.disabled = true;
+    const reussi = await surValider({ date, valeur });
+    boutonValider.disabled = false;
+    if (reussi !== false) fermerFeuille();
+  });
+  formulaire.querySelector('[data-action="supprimer"]')?.addEventListener('click', () => surSupprimer());
+  ouvrirFeuille(releve ? 'Modifier le relevé' : 'Faire le point sur le PEA', formulaire);
+}
+
+/**
+ * Ouvre la feuille « Paramètres du PEA » : date d'ouverture et montant investi avant l'app.
+ * - pea : configuration actuelle, ou null pour activer le suivi
+ * - investiDepart : montant déjà investi avant l'app (centimes ou null)
+ * - surValider({ dateOuverture, investiDepart }) / surArreter() : fonctions async fournies par app.js
+ */
+export function ouvrirFormulaireParametresPea({ pea, investiDepart, surValider, surArreter }) {
+  const boutonValider = creer('button', { type: 'submit', class: 'bouton bouton--plein' }, pea ? 'Enregistrer' : 'Commencer le suivi');
+  const formulaire = creer('form', { class: 'formulaire', novalidate: true },
+    creer('div', { class: 'champ' },
+      creer('label', { class: 'champ__label', for: 'champ-ouverture' }, 'Date d’ouverture du PEA'),
+      creer('input', { class: 'champ__input', type: 'date', id: 'champ-ouverture', value: pea?.dateOuverture ?? '', max: aujourdhui() })),
+    creer('p', { class: 'aide aide--sous-champ' }, 'Elle sert à calculer quand tu atteins les 5 ans (avantage fiscal). Tu peux la laisser vide.'),
+    creerChampMontant(investiDepart ? centimesVersSaisie(investiDepart) : '', !pea, { id: 'champ-investi-depart', libelle: 'Déjà investi avant l’app' }),
+    creer('p', { class: 'aide aide--sous-champ' }, 'Le total que tu avais versé sur ton PEA avant d’utiliser l’app. Il n’est pas déduit de ton budget du mois.'),
+    creer('p', { class: 'erreur', role: 'alert', hidden: true }),
+    creer('div', { class: 'feuille__actions' },
+      boutonValider,
+      pea && creer('button', { type: 'button', class: 'bouton bouton--contour-danger bouton--plein', 'data-action': 'arreter' }, 'Arrêter le suivi du PEA')),
+  );
+  formulaire.addEventListener('input', () => {
+    formulaire.querySelector('.erreur').hidden = true;
+    formulaire.querySelector('[aria-invalid]')?.removeAttribute('aria-invalid');
+  });
+  formulaire.addEventListener('submit', async (evenement) => {
+    evenement.preventDefault();
+    const dateOuverture = formulaire.querySelector('#champ-ouverture').value || null;
+    if (dateOuverture && (!estDateValide(dateOuverture) || dateOuverture > aujourdhui())) {
+      afficherErreur(formulaire, { erreur: 'La date d’ouverture doit être une date passée.', champ: 'champ-ouverture' });
+      return;
+    }
+    const investi = lireMontantFacultatif(formulaire, 'champ-investi-depart');
+    if (investi === undefined) {
+      afficherErreur(formulaire, { erreur: 'Saisis un montant valide, ou laisse le champ vide.', champ: 'champ-investi-depart' });
+      return;
+    }
+    boutonValider.disabled = true;
+    const reussi = await surValider({ dateOuverture, investiDepart: investi });
+    boutonValider.disabled = false;
+    if (reussi !== false) fermerFeuille();
+  });
+  formulaire.querySelector('[data-action="arreter"]')?.addEventListener('click', () => surArreter());
+  ouvrirFeuille(pea ? 'Paramètres du PEA' : 'Suivre mon PEA', formulaire);
+}

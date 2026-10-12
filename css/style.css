@@ -1249,7 +1249,199 @@ svg {
   color: var(--texte-2);
 }
 
-/* ---------- 21. Écrans larges (ordinateur) ---------- */
+/* ---------- 21. PEA ---------- */
+.pea {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Trois chiffres clés côte à côte : valeur, investi, plus-value */
+.pea__chiffres {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.pea__chiffres dt {
+  color: var(--texte-2);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.pea__chiffres dd {
+  margin: 2px 0 0;
+  font-weight: 700;
+  font-size: clamp(0.9375rem, 4.2vw, 1.125rem);
+}
+
+.pea__valeur {
+  font-size: clamp(1.0625rem, 4.8vw, 1.25rem);
+}
+
+.pea__pourcent {
+  display: block;
+  font-size: 0.8125rem;
+}
+
+.pea__rappel {
+  color: var(--texte-2);
+  font-size: 0.875rem;
+}
+
+/* Rappel mis en avant : bordure à gauche + texte en gras (pas seulement une couleur) */
+.pea__rappel--actif {
+  color: var(--texte);
+  font-weight: 600;
+  padding-left: 10px;
+  border-left: 3px solid var(--etat-alerte);
+}
+
+.pea__fiscal {
+  font-size: 0.875rem;
+  color: var(--texte-2);
+}
+
+.pea__fiscal--acquis {
+  color: var(--positif);
+  font-weight: 600;
+}
+
+.pea__historique summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ligne-releve {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+
+.pea__parametres {
+  align-self: center;
+}
+
+/* Graphique d'évolution */
+.evolution {
+  margin: 0;
+}
+
+.evolution__legende {
+  display: flex;
+  gap: 16px;
+  font-size: 0.8125rem;
+  color: var(--texte-2);
+  margin-bottom: 6px;
+}
+
+/* Petit trait devant chaque libellé de la légende, du même style que la courbe */
+.evolution__cle::before {
+  content: '';
+  display: inline-block;
+  width: 18px;
+  margin-right: 6px;
+  vertical-align: middle;
+  border-top: 2px solid var(--serie-1);
+}
+
+.evolution__cle--investi::before {
+  border-top: 2px dashed var(--texte-3);
+}
+
+.evolution__cadre {
+  position: relative;
+  padding: 18px 0;
+}
+
+.evolution__echelle {
+  position: absolute;
+  left: 0;
+  font-size: 0.75rem;
+  color: var(--texte-3);
+}
+
+.evolution__echelle--haut {
+  top: 0;
+}
+
+.evolution__echelle--bas {
+  bottom: 0;
+}
+
+.evolution__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  stroke: none;
+  overflow: visible;
+}
+
+.evolution__repere {
+  stroke: var(--bordure);
+  stroke-width: 1;
+}
+
+.evolution__valeur,
+.evolution__investi {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.evolution__valeur {
+  stroke: var(--serie-1);
+}
+
+.evolution__investi {
+  stroke: var(--texte-3);
+  stroke-dasharray: 5 4;
+}
+
+.evolution__point {
+  fill: var(--serie-1);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.evolution__curseur {
+  stroke: var(--texte-3);
+  stroke-width: 1;
+}
+
+/* Zones tactiles invisibles (une par relevé) */
+.evolution__zone {
+  fill: transparent;
+  cursor: pointer;
+  outline: none;
+}
+
+.evolution__axe {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--texte-3);
+  margin-top: 4px;
+}
+
+.evolution__detail {
+  margin-top: 8px;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+/* ---------- 22. Écrans larges (ordinateur) ---------- */
 @media (min-width: 700px) {
   .contenu {
     padding-top: 16px;

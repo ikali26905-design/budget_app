@@ -91,6 +91,7 @@ const donneesIO = {
   objectifs: {},
   soldesInitiaux: {},
   debutsMois: { '2026-11': '2026-10-28' },
+  pea: null,
 };
 test('export CSV', () => {
   const lignes = io.genererCSV(donneesIO).split('\r\n');
@@ -223,4 +224,55 @@ test('import : débuts de mois incohérents ignorés', () => {
   const fichier = structuredClone(donneesIO);
   fichier.debutsMois = { '2026-11': '2026-10-28', '2026-12': '2026-10-02', '2027-01': 'pas une date' };
   assert.deepEqual(io.validerImport(fichier).donnees.debutsMois, { '2026-11': '2026-10-28' });
+});
+
+const pea = await import(R + 'pea.js');
+const configPea = {
+  compteId: 'pea',
+  dateOuverture: '2024-03-12',
+  releves: [{ date: '2026-09-30', valeur: 324000 }, { date: '2026-08-31', valeur: 290000 }],
+};
+const mouvementsPea = [
+  { type: 'epargne', montant: 100000, categorieId: 'pea', date: '2026-08-05' },
+  { type: 'epargne', montant: 20000, categorieId: 'pea', date: '2026-09-05' },
+  { type: 'epargne', montant: 20000, categorieId: 'pea', date: '2026-10-05' }, // après le dernier relevé
+  { type: 'retrait', montant: 5000, categorieId: 'pea', date: '2026-10-08' },
+  { type: 'epargne', montant: 9999, categorieId: 'livret', date: '2026-10-05' }, // autre compte : ignoré
+];
+test('PEA : investi, valeur estimée et plus-value', () => {
+  // Investi = 1 800 € de départ + 1 000 + 200 + 200 − 50 = 3 150 €
+  assert.equal(pea.calculerInvesti(mouvementsPea, 'pea', 180000), 315000);
+  assert.equal(pea.calculerInvesti(mouvementsPea, 'pea', 180000, '2026-09-30'), 300000);
+  // Valeur = relevé du 30/09 (3 240 €) + 200 − 50 versés depuis = 3 390 €
+  assert.equal(pea.calculerValeurEstimee(configPea, mouvementsPea), 339000);
+  // Au 15/09 : relevé du 31/08 (2 900 €) + versement du 05/09 (200 €)
+  assert.equal(pea.calculerValeurEstimee(configPea, mouvementsPea, '2026-09-15'), 310000);
+  assert.equal(pea.calculerValeurEstimee({ ...configPea, releves: [] }, mouvementsPea), null);
+  assert.deepEqual(pea.calculerPlusValue(339000, 315000), { montant: 24000, pourMille: 76 }); // +7,6 %
+  assert.deepEqual(pea.calculerPlusValue(280000, 300000), { montant: -20000, pourMille: -67 });
+  assert.equal(pea.calculerPlusValue(1000, 0).pourMille, null);
+  const resume = pea.resumerPea(configPea, mouvementsPea, 180000);
+  assert.equal(resume.releve.date, '2026-09-30');
+  assert.equal(resume.plusValue.montant, 24000);
+});
+test('PEA : série du graphique, rappel et avantage fiscal', () => {
+  assert.deepEqual(pea.serieEvolution(configPea, mouvementsPea, 180000), [
+    { date: '2026-08-31', valeur: 290000, investi: 280000 },
+    { date: '2026-09-30', valeur: 324000, investi: 300000 },
+  ]);
+  assert.equal(pea.rappelNecessaire(configPea.releves, '2026-10-20'), false);
+  assert.equal(pea.rappelNecessaire(configPea.releves, '2026-11-01'), true);
+  assert.equal(pea.rappelNecessaire([], '2026-10-01'), true);
+  assert.deepEqual(pea.avantageFiscal('2024-03-12', '2026-10-12'), { acquis: false, moisRestants: 29, dateAcquisition: '2029-03-12' });
+  assert.equal(pea.avantageFiscal('2021-03-12', '2026-03-11').acquis, false);
+  assert.equal(pea.avantageFiscal('2021-03-12', '2026-03-12').acquis, true);
+  assert.equal(d.ecartJours('2026-09-30', '2026-11-01'), 32);
+});
+
+test('import : suivi PEA validé', () => {
+  const fichier = structuredClone(donneesEpargne);
+  fichier.pea = { compteId: 'livret', dateOuverture: '2024-03-12', releves: [{ date: '2026-09-30', valeur: 324000 }, { date: 'faux', valeur: 1 }, { date: '2026-08-31', valeur: 12.5 }] };
+  assert.deepEqual(io.validerImport(fichier).donnees.pea, { compteId: 'livret', dateOuverture: '2024-03-12', releves: [{ date: '2026-09-30', valeur: 324000 }] });
+  fichier.pea.compteId = 'courses'; // pas un compte d'épargne
+  assert.equal(io.validerImport(fichier).donnees.pea, null);
 });
