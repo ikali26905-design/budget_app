@@ -5,6 +5,7 @@ import { creer, ouvrirFeuille, fermerFeuille } from './ui.js';
 import { parserMontant, centimesVersSaisie, formaterMontant } from './money.js';
 import { aujourdhui, estDateValide, nomDuMois, dateLongue } from './dates.js';
 import { moisCommencantLe, bornesDebut } from './periodes.js';
+import { fraisDuVersement, TAUX_FRAIS_DEFAUT } from './pea.js';
 import { typeDeCategorie } from './calculs.js';
 
 // Les trois grandes familles (aussi utilisées pour les catégories)
@@ -144,7 +145,7 @@ function afficherErreur(formulaire, { erreur, champ }) {
  * - surValider(valeurs) : fonction async appelée avec les valeurs validées
  * - surSupprimer() : fonction async appelée au clic sur « Supprimer » (mode modification)
  */
-export function ouvrirFormulaireTransaction({ categories, transaction = null, estRecurrente = false, typeParDefaut = 'depense', surValider, surSupprimer }) {
+export function ouvrirFormulaireTransaction({ categories, pea = null, transaction = null, estRecurrente = false, typeParDefaut = 'depense', surValider, surSupprimer }) {
   const modification = transaction !== null;
   const initial = transaction ?? { type: typeParDefaut, montant: null, categorieId: null, date: aujourdhui(), note: '' };
 
@@ -160,6 +161,7 @@ export function ouvrirFormulaireTransaction({ categories, transaction = null, es
     selecteurSens,
     creerChampMontant(initial.montant ? centimesVersSaisie(initial.montant) : '', !modification),
     creerPastilles(categories, famille, initial.categorieId),
+    creer('p', { class: 'info-frais', 'aria-live': 'polite', hidden: true }),
     creerDateEtNote(initial.date, initial.note),
     creerCaseRecurrente(estRecurrente),
     creer('p', { class: 'erreur', role: 'alert', hidden: true }),
@@ -169,6 +171,22 @@ export function ouvrirFormulaireTransaction({ categories, transaction = null, es
     ),
   );
 
+  // Frais de versement PEA : calcul affiché en direct (« Frais 1 % : 1,00 € · Total débité : 101,00 € »)
+  const infoFrais = formulaire.querySelector('.info-frais');
+  const majFrais = () => {
+    const montant = parserMontant(formulaire.querySelector('#champ-montant').value);
+    const categorieId = formulaire.querySelector('input[name="categorie"]:checked')?.value;
+    const frais = montant === null ? 0 : fraisDuVersement({ type: typeSaisi(formulaire), categorieId, montant }, pea);
+    infoFrais.hidden = frais === 0;
+    if (frais > 0) {
+      const taux = ((pea.tauxFrais ?? TAUX_FRAIS_DEFAUT) / 100).toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+      infoFrais.textContent = `Frais ${taux} % : ${formaterMontant(frais)} · Total débité : ${formaterMontant(montant + frais)}`;
+    }
+  };
+  formulaire.addEventListener('input', majFrais);
+  formulaire.addEventListener('change', majFrais);
+  majFrais();
+
   // Changement de type : on réaffiche les pastilles de la bonne famille et le libellé du bouton
   formulaire.addEventListener('change', (evenement) => {
     const { name, value } = evenement.target;
@@ -177,6 +195,7 @@ export function ouvrirFormulaireTransaction({ categories, transaction = null, es
       selecteurSens.hidden = value !== 'epargne';
     }
     if (name === 'type' || name === 'sens') boutonValider.textContent = libelleBouton(modification, typeSaisi(formulaire));
+    majFrais(); // après le remplacement éventuel des pastilles
   });
 
   // Dès qu'on corrige un champ, on retire le message d'erreur
@@ -462,8 +481,16 @@ export function ouvrirFormulaireReleve({ releve = null, surValider, surSupprimer
   ouvrirFeuille(releve ? 'Modifier le relevé' : 'Faire le point sur le PEA', formulaire);
 }
 
+// Lit un pourcentage (« 1 », « 0,5 », « 1.25 ») en points de base (100 = 1 %), entre 0 et 10 % ; null si invalide
+function parserPourcentage(texte) {
+  const correspondance = /^(\d{1,2})(?:[,.](\d{1,2}))?$/.exec(texte.trim().replace(/\s*%$/, ''));
+  if (!correspondance) return null;
+  const points = Number(correspondance[1]) * 100 + Number((correspondance[2] ?? '').padEnd(2, '0'));
+  return points <= 1000 ? points : null;
+}
+
 /**
- * Ouvre la feuille « Paramètres du PEA » : date d'ouverture et montant investi avant l'app.
+ * Ouvre la feuille « Paramètres du PEA » : date d'ouverture, montant investi avant l'app et frais de versement.
  * - pea : configuration actuelle, ou null pour activer le suivi
  * - investiDepart : montant déjà investi avant l'app (centimes ou null)
  * - surValider({ dateOuverture, investiDepart }) / surArreter() : fonctions async fournies par app.js
@@ -477,6 +504,13 @@ export function ouvrirFormulaireParametresPea({ pea, investiDepart, surValider, 
     creer('p', { class: 'aide aide--sous-champ' }, 'Elle sert à calculer quand tu atteins les 5 ans (avantage fiscal). Tu peux la laisser vide.'),
     creerChampMontant(investiDepart ? centimesVersSaisie(investiDepart) : '', !pea, { id: 'champ-investi-depart', libelle: 'Déjà investi avant l’app' }),
     creer('p', { class: 'aide aide--sous-champ' }, 'Le total que tu avais versé sur ton PEA avant d’utiliser l’app. Il n’est pas déduit de ton budget du mois.'),
+    creer('div', { class: 'champ' },
+      creer('label', { class: 'champ__label', for: 'champ-taux-frais' }, 'Frais sur chaque versement (%)'),
+      creer('input', {
+        class: 'champ__input', id: 'champ-taux-frais', inputmode: 'decimal', autocomplete: 'off',
+        value: (((pea?.tauxFrais ?? TAUX_FRAIS_DEFAUT)) / 100).toLocaleString('fr-FR', { maximumFractionDigits: 2 }),
+      })),
+    creer('p', { class: 'aide aide--sous-champ' }, 'Pour 100 € versés à 1 %, le PEA reçoit 100 € et 101 € sont déduits de ton budget. Mets 0 s’il n’y a pas de frais.'),
     creer('p', { class: 'erreur', role: 'alert', hidden: true }),
     creer('div', { class: 'feuille__actions' },
       boutonValider,
@@ -498,8 +532,13 @@ export function ouvrirFormulaireParametresPea({ pea, investiDepart, surValider, 
       afficherErreur(formulaire, { erreur: 'Saisis un montant valide, ou laisse le champ vide.', champ: 'champ-investi-depart' });
       return;
     }
+    const tauxFrais = parserPourcentage(formulaire.querySelector('#champ-taux-frais').value);
+    if (tauxFrais === null) {
+      afficherErreur(formulaire, { erreur: 'Saisis un pourcentage entre 0 et 10, par exemple 1 ou 0,5.', champ: 'champ-taux-frais' });
+      return;
+    }
     boutonValider.disabled = true;
-    const reussi = await surValider({ dateOuverture, investiDepart: investi });
+    const reussi = await surValider({ dateOuverture, investiDepart: investi, tauxFrais });
     boutonValider.disabled = false;
     if (reussi !== false) fermerFeuille();
   });

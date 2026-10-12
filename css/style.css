@@ -1328,6 +1328,15 @@ svg {
   text-align: left;
 }
 
+.info-frais {
+  margin: -6px 0 16px;
+  padding: 8px 12px;
+  border-radius: var(--rayon-petit);
+  background: var(--surface-2);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
 .pea__parametres {
   align-self: center;
 }

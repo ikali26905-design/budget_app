@@ -3,7 +3,8 @@
 
 import { MONTANT_MAX } from './money.js';
 import { aujourdhui, estDateValide } from './dates.js';
-import { typeDeCategorie } from './calculs.js';
+import { typeDeCategorie, montantDebite } from './calculs.js';
+import { TAUX_FRAIS_DEFAUT } from './pea.js';
 import { moisBudgetaire, moisCommencantLe } from './periodes.js';
 
 const TYPES_CATEGORIES = ['depense', 'revenu', 'epargne'];
@@ -42,15 +43,18 @@ function champCSV(valeur) {
 // (comme dans l'app : dépense et versement d'épargne sortent du budget, donc négatifs)
 function montantCSV(transaction) {
   const signe = transaction.type === 'depense' || transaction.type === 'epargne' ? '-' : '';
-  const euros = Math.floor(transaction.montant / 100);
-  const centimes = String(transaction.montant % 100).padStart(2, '0');
-  return `${signe}${euros},${centimes}`;
+  return signe + centimesCSV(montantDebite(transaction)); // frais compris : ce qui sort réellement du budget
+}
+
+// Centimes au format décimal français, sans signe : 1890 → « 18,90 »
+function centimesCSV(centimes) {
+  return `${Math.floor(centimes / 100)},${String(centimes % 100).padStart(2, '0')}`;
 }
 
 // Produit un CSV (séparateur « ; », virgule décimale) que Excel et LibreOffice ouvrent directement
 export function genererCSV(donnees) {
   const categories = new Map(donnees.categories.map((c) => [c.id, c.nom]));
-  const entete = ['Date', 'Mois', 'Type', 'Catégorie', 'Montant (€)', 'Note', 'Mensuelle'];
+  const entete = ['Date', 'Mois', 'Type', 'Catégorie', 'Montant (€)', 'Dont frais (€)', 'Note', 'Mensuelle'];
   const lignes = [...donnees.transactions]
     .sort((a, b) => a.date.localeCompare(b.date) || a.creeLe - b.creeLe)
     .map((t) => [
@@ -59,6 +63,7 @@ export function genererCSV(donnees) {
       LIBELLES_CSV[t.type],
       champCSV(categories.get(t.categorieId) ?? 'Sans catégorie'),
       montantCSV(t), // pas de champCSV ici : le « - » d'un montant négatif doit rester un nombre
+      t.frais ? centimesCSV(t.frais) : '',
       champCSV(t.note ?? ''),
       t.recurrenteId ? 'oui' : 'non',
     ].join(';'));
@@ -124,6 +129,7 @@ function nettoyerTransaction(t, i, typesCategories) {
     note: typeof t.note === 'string' ? t.note.slice(0, 80) : '',
     recurrenteId: typeof t.recurrenteId === 'string' ? t.recurrenteId : null,
     creeLe: Number.isFinite(t.creeLe) ? t.creeLe : 0,
+    ...(estMontant(t.frais) ? { frais: t.frais } : {}), // frais de versement éventuels (PEA)
   };
 }
 
@@ -136,7 +142,11 @@ function nettoyerRecurrente(r, i, typesCategories) {
   verifierCategorie(r, nom, typesCategories);
   verifier(Number.isInteger(r.jour) && r.jour >= 1 && r.jour <= 31, `${nom} : jour invalide.`);
   verifier(typeof r.dernierMois === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(r.dernierMois), `${nom} : mois invalide.`);
-  return { id: r.id, type: r.type, montant: r.montant, categorieId: r.categorieId, jour: r.jour, note: typeof r.note === 'string' ? r.note.slice(0, 80) : '', dernierMois: r.dernierMois };
+  return {
+    id: r.id, type: r.type, montant: r.montant, categorieId: r.categorieId, jour: r.jour,
+    note: typeof r.note === 'string' ? r.note.slice(0, 80) : '', dernierMois: r.dernierMois,
+    ...(estMontant(r.frais) ? { frais: r.frais } : {}),
+  };
 }
 
 // Vérifie qu'une liste ne contient pas deux fois le même id
@@ -159,9 +169,12 @@ function nettoyerPea(pea, typesCategories) {
   const releves = (Array.isArray(pea.releves) ? pea.releves : [])
     .filter((r) => r && estDateValide(r.date) && Number.isSafeInteger(r.valeur) && r.valeur >= 0 && r.valeur <= MONTANT_MAX)
     .map((r) => ({ date: r.date, valeur: r.valeur }));
+  // Taux de frais en points de base (100 = 1 %), entre 0 et 10 %
+  const tauxValide = Number.isInteger(pea.tauxFrais) && pea.tauxFrais >= 0 && pea.tauxFrais <= 1000;
   return {
     compteId: pea.compteId,
     dateOuverture: estDateValide(pea.dateOuverture) ? pea.dateOuverture : null,
+    tauxFrais: tauxValide ? pea.tauxFrais : TAUX_FRAIS_DEFAUT,
     releves,
   };
 }

@@ -10,6 +10,25 @@ import { ecartJours, moisEcoules } from './dates.js';
 export const MOIS_AVANTAGE_FISCAL = 60;
 // Au-delà de ce nombre de jours sans relevé, on rappelle de faire le point
 export const JOURS_AVANT_RAPPEL = 31;
+// Frais par défaut sur les versements, en points de base (100 = 1 %)
+export const TAUX_FRAIS_DEFAUT = 100;
+
+// Frais d'un versement en centimes, arrondis au centime le plus proche : (10 000 c, 100 pb) → 100 c (1 €)
+// Calcul en entiers : on ajoute 5 000 avant la division entière pour arrondir au plus proche
+export function calculerFrais(montant, tauxPointsDeBase) {
+  return Math.floor((montant * tauxPointsDeBase + 5000) / 10000);
+}
+
+// Frais à appliquer à un versement : seulement un versement (« epargne ») sur le compte du PEA
+export function fraisDuVersement(valeurs, pea) {
+  if (!pea || valeurs.type !== 'epargne' || valeurs.categorieId !== pea.compteId) return 0;
+  return calculerFrais(valeurs.montant, pea.tauxFrais ?? TAUX_FRAIS_DEFAUT);
+}
+
+// Total des frais de versement payés sur le PEA
+export function totalFrais(transactions, compteId) {
+  return transactions.reduce((s, t) => s + (t.categorieId === compteId ? (t.frais ?? 0) : 0), 0);
+}
 
 // Relevés triés du plus ancien au plus récent
 export function trierReleves(releves) {

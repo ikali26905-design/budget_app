@@ -7,12 +7,12 @@
 import { creer, remplir, etatVide, badgeCategorie, icone } from './ui.js';
 import { formaterMontant, formaterMontantCourt, formaterMontantSigne } from './money.js';
 import { nomDuMoisSeul, nomDuMois, deMois, libelleJour, aujourdhui, decalerMois, dateLongue, dateCourte, ecartJours } from './dates.js';
-import { resumerPea, serieEvolution, rappelNecessaire, avantageFiscal, trierReleves } from './pea.js';
+import { resumerPea, serieEvolution, rappelNecessaire, avantageFiscal, trierReleves, totalFrais, TAUX_FRAIS_DEFAUT } from './pea.js';
 import { finPeriode, bornesDebut } from './periodes.js';
 import {
   transactionsDuMois, calculerTotaux, calculerSoldeCumule, calculerTotalParCategorie,
   calculerEtatBudget, pourcentage, grouperParJour, categoriesUtilisees, compterUtilisations,
-  calculerSoldesEpargne, estEpargne,
+  calculerSoldesEpargne, estEpargne, montantDebite,
 } from './calculs.js';
 import { creerGraphiqueBarres, creerJauge, infosNiveau, creerBarreProgression, creerGraphiqueEvolution } from './charts.js';
 
@@ -84,7 +84,7 @@ function tuilesTotaux(totaux) {
   return creer('div', { class: 'tuiles' },
     tuile('Revenus', totaux.revenus, 'tuile--revenus', '↑'),
     tuile('Dépenses', totaux.depenses, 'tuile--depenses', '↓'),
-    tuile('Épargne', totaux.epargne, 'tuile--epargne', '⇢'));
+    tuile('Épargne', totaux.epargne + totaux.frais, 'tuile--epargne', '⇢')); // frais de versement compris
 }
 
 // Ligne discrète : solde cumulé depuis la première transaction jusqu'à la fin du mois
@@ -196,10 +196,12 @@ const CLASSES_MONTANT = { depense: '', revenu: 'montant--revenu', epargne: 'mont
 
 // Texte secondaire d'une ligne : la note, ou à défaut la nature du mouvement d'épargne
 function noteTransaction(transaction) {
-  if (transaction.note) return transaction.note;
-  if (transaction.type === 'epargne') return 'Mis de côté';
-  if (transaction.type === 'retrait') return 'Retiré de l’épargne';
-  return '';
+  let texte = transaction.note;
+  if (!texte && transaction.type === 'epargne') texte = 'Mis de côté';
+  if (!texte && transaction.type === 'retrait') texte = 'Retiré de l’épargne';
+  // Les frais de versement (PEA) sont rappelés pour expliquer le montant débité
+  if (transaction.frais) texte = `${texte} · dont ${formaterMontant(transaction.frais)} de frais`;
+  return texte;
 }
 
 // Une ligne de transaction cliquable (ouvre la modification)
@@ -219,7 +221,7 @@ function ligneTransaction(transaction, categorie, actions) {
           creer('span', { class: 'visuellement-cache' }, ' (chaque mois)'))),
       noteTransaction(transaction) && creer('span', { class: 'ligne-transaction__note' }, noteTransaction(transaction))),
     creer('span', { class: `ligne-transaction__montant montant ${CLASSES_MONTANT[transaction.type]}` },
-      formaterMontantSigne(transaction.montant, transaction.type)),
+      formaterMontantSigne(montantDebite(transaction), transaction.type)),
     ));
 }
 
@@ -421,9 +423,10 @@ export function rendreReglages(conteneur, { donnees, actions }) {
 /* ===================== Épargne ===================== */
 
 // Carte principale : total épargné (tous comptes) et mouvement net du mois
-function carteTotalEpargne(total, netDuMois, mois, plusValuePea, actions) {
+function carteTotalEpargne(total, netDuMois, fraisDuMois, mois, plusValuePea, actions) {
   let resume = `Rien mis de côté en ${nomDuMoisSeul(mois)}`;
   if (netDuMois > 0) resume = `+${formaterMontant(netDuMois)} mis de côté ce mois-ci`;
+  if (netDuMois > 0 && fraisDuMois > 0) resume += ` (+${formaterMontant(fraisDuMois)} de frais)`;
   if (netDuMois < 0) resume = `${formaterMontant(-netDuMois)} retirés ce mois-ci`;
   return creer('div', { class: 'carte carte-solde' },
     creer('p', { class: 'carte-solde__label' }, `Épargne totale fin ${nomDuMoisSeul(mois)}`),
@@ -475,11 +478,11 @@ export function rendreEpargne(conteneur, { donnees, mois, actions }) {
   // Total : comptes classiques + valeur réelle du PEA (ou ce qui y a été investi s'il n'y a pas encore de relevé)
   const totalPea = resume ? (resume.valeur ?? resume.investi) : 0;
   const total = comptes.reduce((s, c) => s + (soldes.get(c.id) ?? 0), 0) + totalPea;
-  const netDuMois = calculerTotaux(transactionsDuMois(donnees.transactions, mois, donnees.debutsMois)).epargne;
+  const totauxDuMois = calculerTotaux(transactionsDuMois(donnees.transactions, mois, donnees.debutsMois));
   // Message d'explication tant que l'épargne n'a jamais été utilisée
   const aucunMouvement = !donnees.transactions.some((t) => estEpargne(t.type)) && Object.keys(donnees.soldesInitiaux).length === 0;
   remplir(conteneur,
-    carteTotalEpargne(total, netDuMois, mois, resume?.plusValue?.montant ?? null, actions),
+    carteTotalEpargne(total, totauxDuMois.epargne, totauxDuMois.frais, mois, resume?.plusValue?.montant ?? null, actions),
     aucunMouvement && creer('p', { class: 'aide aide--centre' },
       'Mets de l’argent de côté pour un projet ou les imprévus : il est déduit de ton solde du mois et s’accumule ici.'),
     creer('h2', { class: 'titre-section' }, 'Mes comptes'),
@@ -550,6 +553,14 @@ function ligneDernierReleve(pea, resume) {
       : `Dernier relevé le ${dateLongue(resume.releve.date)}${resume.valeur !== resume.releve.valeur ? ' (valeur estimée avec tes versements et retraits depuis)' : ''}.`);
 }
 
+// Frais de versement : taux appliqué et total déjà payé
+function ligneFrais(pea, transactions) {
+  const taux = ((pea.tauxFrais ?? TAUX_FRAIS_DEFAUT) / 100).toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+  const paye = totalFrais(transactions, pea.compteId);
+  return creer('p', { class: 'pea__fiscal' },
+    `Frais de ${taux} % sur chaque versement${paye > 0 ? ` · ${formaterMontant(paye)} payés au total` : ''}`);
+}
+
 // Historique des relevés, repliable (balise <details> native)
 function historiqueReleves(pea, actions) {
   const releves = trierReleves(pea.releves).reverse();
@@ -582,6 +593,7 @@ function sectionPea(donnees, resume, actions) {
       ligneDernierReleve(pea, resume),
       creer('button', { type: 'button', class: 'bouton bouton--plein', onclick: () => actions.ajouterReleve() }, 'Faire le point'),
       ligneAvantageFiscal(pea.dateOuverture),
+      ligneFrais(pea, donnees.transactions),
       serie.length >= 2
         ? creerGraphiqueEvolution(serie, { formaterMontant: formaterMontantCourtArrondi, formaterDate: dateCourte })
         : creer('p', { class: 'aide' }, 'Le graphique d’évolution apparaîtra à partir de 2 relevés.'),

@@ -19,7 +19,7 @@ import {
   ouvrirFormulaireTransaction, ouvrirFormulaireMontantCible, ouvrirFormulaireCategorie, ouvrirFormulaireCompte,
   ouvrirFormulaireDebutMois, ouvrirFormulaireReleve, ouvrirFormulaireParametresPea,
 } from './formulaire.js';
-import { calculerValeurEstimee, trierReleves } from './pea.js';
+import { calculerValeurEstimee, trierReleves, fraisDuVersement, TAUX_FRAIS_DEFAUT } from './pea.js';
 import { rendreAccueil, rendreHistorique, rendreEpargne, rendreBudgets, rendreReglages } from './ecrans.js';
 import { genererJSON, genererCSV, telecharger, nomFichier, validerImport } from './io.js';
 
@@ -107,6 +107,12 @@ async function appliquerRecurrences() {
   return nouvelles.length;
 }
 
+// Frais de versement à appliquer (PEA) : un nombre de centimes, ou undefined s'il n'y en a pas
+// (undefined : le champ disparaît à l'enregistrement en JSON, les autres transactions restent inchangées)
+function fraisPour(valeurs) {
+  return fraisDuVersement(valeurs, etat.donnees.pea) || undefined;
+}
+
 // Construit un modèle récurrent à partir des valeurs du formulaire
 function modeleDepuis(valeurs) {
   return {
@@ -115,6 +121,7 @@ function modeleDepuis(valeurs) {
     categorieId: valeurs.categorieId,
     note: valeurs.note,
     jour: Number(valeurs.date.slice(8, 10)),
+    frais: fraisPour(valeurs),
   };
 }
 
@@ -163,7 +170,7 @@ async function ajouterTransaction(valeurs) {
     const modele = await store.ajouterRecurrente({ ...modeleDepuis(valeurs), dernierMois: moisDe(valeurs.date) });
     recurrenteId = modele.id;
   }
-  await store.ajouterTransaction({ ...champs, recurrenteId });
+  await store.ajouterTransaction({ ...champs, frais: fraisPour(valeurs), recurrenteId });
   // Si la date est dans un mois passé, on rattrape les mois suivants
   if (chaqueMois) await appliquerRecurrences();
 }
@@ -172,6 +179,7 @@ async function ajouterTransaction(valeurs) {
 function ouvrirAjout(typeParDefaut = 'depense') {
   ouvrirFormulaireTransaction({
     categories: etat.donnees.categories,
+    pea: etat.donnees.pea,
     typeParDefaut,
     surValider: (valeurs) => validerTransaction(valeurs, null, async () => {
       await ajouterTransaction(valeurs);
@@ -216,7 +224,7 @@ async function enregistrerModification(transaction, modele, valeurs) {
     const nouveau = await store.ajouterRecurrente({ ...modeleDepuis(valeurs), dernierMois: moisDe(valeurs.date) });
     recurrenteId = nouveau.id;
   }
-  await store.modifierTransaction(transaction.id, { ...champs, recurrenteId });
+  await store.modifierTransaction(transaction.id, { ...champs, frais: fraisPour(valeurs), recurrenteId });
   if (!modele && chaqueMois) await appliquerRecurrences();
 }
 
@@ -242,6 +250,7 @@ function ouvrirModification(transaction) {
   const modele = etat.donnees.recurrentes.find((r) => r.id === transaction.recurrenteId) ?? null;
   ouvrirFormulaireTransaction({
     categories: etat.donnees.categories,
+    pea: etat.donnees.pea,
     transaction,
     estRecurrente: modele !== null,
     surValider: (valeurs) => validerTransaction(valeurs, transaction.id, async () => {
@@ -358,10 +367,10 @@ function ouvrirParametresPea() {
   ouvrirFormulaireParametresPea({
     pea,
     investiDepart: pea ? (etat.donnees.soldesInitiaux[pea.compteId] ?? null) : null,
-    surValider: ({ dateOuverture, investiDepart }) => executer(async () => {
+    surValider: ({ dateOuverture, investiDepart, tauxFrais }) => executer(async () => {
       const compteId = pea ? pea.compteId : await compteDuPea();
       await store.definirCompte(compteId, { soldeInitial: investiDepart, objectif: etat.donnees.objectifs[compteId] ?? null });
-      await store.definirPea({ compteId, dateOuverture, releves: pea?.releves ?? [] });
+      await store.definirPea({ compteId, dateOuverture, tauxFrais: tauxFrais ?? TAUX_FRAIS_DEFAUT, releves: pea?.releves ?? [] });
       afficherToast(pea ? 'PEA mis à jour' : 'Suivi du PEA activé');
       await rafraichir();
     }),

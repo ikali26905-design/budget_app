@@ -35,13 +35,20 @@ export function typeDeCategorie(typeTransaction) {
   return estEpargne(typeTransaction) ? 'epargne' : typeTransaction;
 }
 
-// Calcule revenus, dépenses, épargne nette (versements − retraits) et solde disponible
+// Calcule revenus, dépenses, épargne nette (versements − retraits), frais de versement et solde disponible.
+// Les frais (ex. 1 % sur un versement PEA) ne vont pas sur le compte d'épargne mais sortent bien du budget.
 export function calculerTotaux(transactions) {
   const total = (type) => somme(transactions.filter((t) => t.type === type));
   const revenus = total('revenu');
   const depenses = total('depense');
   const epargne = total('epargne') - total('retrait');
-  return { revenus, depenses, epargne, solde: revenus - depenses - epargne };
+  const frais = transactions.reduce((s, t) => s + (t.frais ?? 0), 0);
+  return { revenus, depenses, epargne, frais, solde: revenus - depenses - epargne - frais };
+}
+
+// Montant total qui sort (ou entre) du budget pour une transaction : montant + frais éventuels
+export function montantDebite(transaction) {
+  return transaction.montant + (transaction.frais ?? 0);
 }
 
 // Solde de chaque compte d'épargne jusqu'à une date incluse : Map { idCompte → centimes }
@@ -124,6 +131,7 @@ export function genererOccurrences(recurrentes, dateDuJour) {
         date,
         note: modele.note,
         recurrenteId: modele.id,
+        ...(modele.frais ? { frais: modele.frais } : {}), // frais de versement (PEA), s'il y en a
       });
       derniersMois[modele.id] = mois;
       mois = decalerMois(mois, 1);

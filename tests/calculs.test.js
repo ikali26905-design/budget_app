@@ -45,7 +45,7 @@ const tx = [
 ];
 test('totaux et soldes', () => {
   const oct = c.transactionsDuMois(tx, '2026-10');
-  assert.deepEqual(c.calculerTotaux(oct), { revenus: 20000, depenses: 49890, epargne: 0, solde: -29890 });
+  assert.deepEqual(c.calculerTotaux(oct), { revenus: 20000, depenses: 49890, epargne: 0, frais: 0, solde: -29890 });
   assert.equal(c.calculerSoldeCumule(tx, '2026-10'), 80000 - 29890);
   assert.equal(c.calculerSoldeCumule(tx, '2026-09'), 80000);
   assert.deepEqual(c.calculerTotalParCategorie(oct), [{ categorieId: 'logement', total: 45000 }, { categorieId: 'courses', total: 4890 }]);
@@ -95,9 +95,9 @@ const donneesIO = {
 };
 test('export CSV', () => {
   const lignes = io.genererCSV(donneesIO).split('\r\n');
-  assert.equal(lignes[0], '﻿Date;Mois;Type;Catégorie;Montant (€);Note;Mensuelle');
-  assert.equal(lignes[1], "2026-10-01;2026-10;Revenu;Job;800,00;'=SOMME(A1);oui"); // formule neutralisée
-  assert.equal(lignes[2], '2026-10-05;2026-10;Dépense;Courses;-18,90;"Lidl; ""promo""";non'); // guillemets échappés
+  assert.equal(lignes[0], '﻿Date;Mois;Type;Catégorie;Montant (€);Dont frais (€);Note;Mensuelle');
+  assert.equal(lignes[1], "2026-10-01;2026-10;Revenu;Job;800,00;;'=SOMME(A1);oui"); // formule neutralisée
+  assert.equal(lignes[2], '2026-10-05;2026-10;Dépense;Courses;-18,90;;"Lidl; ""promo""";non'); // guillemets échappés
 });
 test('import : export JSON puis réimport identique', () => {
   const r = io.validerImport(JSON.parse(io.genererJSON(donneesIO)));
@@ -129,7 +129,7 @@ const mouvementsEpargne = [
 test('épargne : le solde du mois déduit l’épargne nette', () => {
   const oct = c.transactionsDuMois(mouvementsEpargne, '2026-10');
   // épargne nette = 150 + 50 − 40 = 160 € ; solde = 1000 − 300 − 160 = 540 €
-  assert.deepEqual(c.calculerTotaux(oct), { revenus: 100000, depenses: 30000, epargne: 16000, solde: 54000 });
+  assert.deepEqual(c.calculerTotaux(oct), { revenus: 100000, depenses: 30000, epargne: 16000, frais: 0, solde: 54000 });
 });
 test('épargne : solde de chaque compte, à une date et en excluant une transaction', () => {
   const soldes = c.calculerSoldesEpargne(mouvementsEpargne);
@@ -153,8 +153,8 @@ const donneesEpargne = {
 };
 test('épargne : CSV et aller-retour JSON', () => {
   const lignes = io.genererCSV(donneesEpargne).split('\r\n');
-  assert.equal(lignes[1], '2026-10-06;2026-10;Épargne (versement);Livret A;-50,00;;non');
-  assert.equal(lignes[2], '2026-10-07;2026-10;Épargne (retrait);Livret A;10,00;;non');
+  assert.equal(lignes[1], '2026-10-06;2026-10;Épargne (versement);Livret A;-50,00;;;non');
+  assert.equal(lignes[2], '2026-10-07;2026-10;Épargne (retrait);Livret A;10,00;;;non');
   const r = io.validerImport(JSON.parse(io.genererJSON(donneesEpargne)));
   assert.equal(r.ok, true);
   assert.deepEqual(r.donnees, donneesEpargne);
@@ -272,7 +272,40 @@ test('PEA : série du graphique, rappel et avantage fiscal', () => {
 test('import : suivi PEA validé', () => {
   const fichier = structuredClone(donneesEpargne);
   fichier.pea = { compteId: 'livret', dateOuverture: '2024-03-12', releves: [{ date: '2026-09-30', valeur: 324000 }, { date: 'faux', valeur: 1 }, { date: '2026-08-31', valeur: 12.5 }] };
-  assert.deepEqual(io.validerImport(fichier).donnees.pea, { compteId: 'livret', dateOuverture: '2024-03-12', releves: [{ date: '2026-09-30', valeur: 324000 }] });
+  assert.deepEqual(io.validerImport(fichier).donnees.pea, { compteId: 'livret', dateOuverture: '2024-03-12', tauxFrais: 100, releves: [{ date: '2026-09-30', valeur: 324000 }] });
   fichier.pea.compteId = 'courses'; // pas un compte d'épargne
   assert.equal(io.validerImport(fichier).donnees.pea, null);
+});
+
+test('PEA : frais de versement (1 %)', () => {
+  assert.equal(pea.calculerFrais(10000, 100), 100); // 100 € → 1 €
+  assert.equal(pea.calculerFrais(12345, 100), 123); // 123,45 € → 1,2345 € → 1,23 €
+  assert.equal(pea.calculerFrais(12350, 100), 124); // 1,235 € → arrondi à 1,24 €
+  assert.equal(pea.calculerFrais(10000, 50), 50); // 0,5 %
+  const config = { compteId: 'pea', tauxFrais: 100, releves: [] };
+  assert.equal(pea.fraisDuVersement({ type: 'epargne', categorieId: 'pea', montant: 10000 }, config), 100);
+  assert.equal(pea.fraisDuVersement({ type: 'retrait', categorieId: 'pea', montant: 10000 }, config), 0); // pas sur un retrait
+  assert.equal(pea.fraisDuVersement({ type: 'epargne', categorieId: 'livret', montant: 10000 }, config), 0); // autre compte
+  assert.equal(pea.fraisDuVersement({ type: 'epargne', categorieId: 'pea', montant: 10000 }, { compteId: 'pea', releves: [] }), 100); // taux par défaut
+  // 100 € versés + 1 € de frais : le PEA reçoit 100 €, le budget perd 101 €
+  const tx = [
+    { type: 'revenu', montant: 50000, categorieId: 'job', date: '2026-10-01' },
+    { type: 'epargne', montant: 10000, frais: 100, categorieId: 'pea', date: '2026-10-02' },
+  ];
+  assert.deepEqual(c.calculerTotaux(tx), { revenus: 50000, depenses: 0, epargne: 10000, frais: 100, solde: 39900 });
+  assert.equal(c.montantDebite(tx[1]), 10100);
+  assert.equal(pea.calculerInvesti(tx, 'pea'), 10000);
+  assert.equal(pea.totalFrais(tx, 'pea'), 100);
+  // Les occurrences mensuelles reprennent les frais du modèle
+  const r = c.genererOccurrences([{ id: 'm', type: 'epargne', montant: 10000, frais: 100, categorieId: 'pea', jour: 5, note: '', dernierMois: '2026-09' }], '2026-10-06');
+  assert.equal(r.nouvelles[0].frais, 100);
+});
+
+test('CSV et import : frais de versement', () => {
+  const fichier = structuredClone(donneesEpargne);
+  fichier.transactions[0].frais = 50; // versement de 50 € + 0,50 € de frais
+  assert.equal(io.genererCSV(fichier).split('\r\n')[1], '2026-10-06;2026-10;Épargne (versement);Livret A;-50,50;0,50;;non');
+  assert.equal(io.validerImport(fichier).donnees.transactions[0].frais, 50);
+  fichier.transactions[0].frais = -3; // invalide : ignoré
+  assert.equal('frais' in io.validerImport(fichier).donnees.transactions[0], false);
 });
