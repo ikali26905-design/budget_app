@@ -30,15 +30,36 @@ export function parserMontant(texte) {
   return total;
 }
 
+/* ----- Mode discret : quand il est actif, tous les montants affichés deviennent « ••• € » ----- */
+// Tous les écrans passent par les fonctions ci-dessous : un seul interrupteur suffit à tout masquer.
+const MASQUE = '•••\u00a0€';
+let masquer = false;
+
+// Active ou désactive le masquage (appelé par app.js avant de redessiner)
+export function definirMasquage(actif) {
+  masquer = actif;
+}
+
 // Formate des centimes en texte français : 123456 → « 1 234,56 € » (vrai signe moins « − » si négatif)
 export function formaterMontant(centimes) {
-  return formateurEuros.format(centimes / 100).replace('-', '−');
+  return masquer ? MASQUE : formaterMontantVisible(centimes);
+}
+
+// Comme formaterMontant, mais jamais masqué : pour les formulaires, où l'on voit déjà ce qu'on tape
+export function formaterMontantVisible(centimes) {
+  return normaliser(formateurEuros.format(centimes / 100));
+}
+
+// Signe moins typographique, et espace insécable classique à la place de l'espace fine (U+202F) :
+// certaines polices (dont DM Sans) n'ont pas l'espace fine, les milliers seraient collés (« 1650 € »)
+function normaliser(texte) {
+  return texte.replace('-', '−').replace(/\u202f/g, '\u00a0');
 }
 
 // Comme formaterMontant, mais sans « ,00 » pour les montants ronds : 25000 → « 250 € »
 export function formaterMontantCourt(centimes) {
-  if (centimes % 100 !== 0) return formaterMontant(centimes);
-  return formateurEurosRond.format(centimes / 100).replace('-', '−');
+  if (masquer || centimes % 100 !== 0) return formaterMontant(centimes);
+  return normaliser(formateurEurosRond.format(centimes / 100));
 }
 
 // Formate avec un signe explicite selon le type : « +1 200,00 € » (revenu, retrait d'épargne)

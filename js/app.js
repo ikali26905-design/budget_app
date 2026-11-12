@@ -13,14 +13,15 @@ import {
   genererOccurrences, transactionsDuMois, calculerTotaux, calculerTotalParCategorie, compterUtilisations, choisirCouleur,
   calculerSoldesEpargne,
 } from './calculs.js';
-import { formaterMontant, formaterMontantSigne } from './money.js';
+import { formaterMontant, formaterMontantSigne, definirMasquage } from './money.js';
+import { lirePreferences, enregistrerPreference, appliquerPreferences, suivreThemeSysteme } from './preferences.js';
 import { afficherToast, informer, demanderConfirmation, fermerFeuille } from './ui.js';
 import {
   ouvrirFormulaireTransaction, ouvrirFormulaireMontantCible, ouvrirFormulaireCategorie, ouvrirFormulaireCompte,
   ouvrirFormulaireDebutMois, ouvrirFormulaireReleve, ouvrirFormulaireParametresPea,
 } from './formulaire.js';
 import { calculerValeurEstimee, trierReleves, fraisDuVersement, TAUX_FRAIS_DEFAUT } from './pea.js';
-import { rendreAccueil, rendreHistorique, rendreEpargne, rendreBudgets, rendreReglages } from './ecrans.js';
+import { montantAvecCentimes, rendreAccueil, rendreHistorique, rendreEpargne, rendreBudgets, rendreReglages } from './ecrans.js';
 import { genererJSON, genererCSV, telecharger, nomFichier, validerImport } from './io.js';
 
 // État de l'interface (les données elles-mêmes viennent toujours de store.js)
@@ -29,6 +30,7 @@ const etat = {
   mois: moisDe(aujourdhui()), // mois affiché, « AAAA-MM » (recalculé au démarrage avec les débuts de mois)
   ecran: 'accueil',
   filtre: null, // id de la catégorie filtrée dans l'historique (null = toutes)
+  preferences: lirePreferences(), // thème, fond animé, mode discret (propres à cet appareil)
 };
 
 /* ===================== Outils ===================== */
@@ -60,7 +62,13 @@ async function rafraichir() {
 
 // Met à jour l'en-tête : nom du mois et bouton « Revenir à ce mois-ci »
 function rendreEnTete() {
-  document.getElementById('titre-mois').textContent = nomDuMois(etat.mois);
+  // L'année en petit au-dessus, le mois en grand
+  const [annee] = etat.mois.split('-');
+  const nomMois = nomDuMois(etat.mois).replace(` ${annee}`, '');
+  const annee_ = document.createElement('span');
+  annee_.className = 'nav-mois__annee';
+  annee_.textContent = annee;
+  document.getElementById('titre-mois').replaceChildren(annee_, nomMois);
   document.getElementById('mois-actuel').hidden = etat.mois === moisCourant();
   // Si le mois ne correspond pas au calendrier, on affiche ses vraies dates : « 28 sept. – 28 oct. »
   const debuts = etat.donnees.debutsMois;
@@ -70,6 +78,8 @@ function rendreEnTete() {
   const surReglages = etat.ecran === 'reglages';
   document.getElementById('nav-mois').hidden = surReglages;
   document.getElementById('titre-reglages').hidden = !surReglages;
+  // La roue reste « enfoncée » sur l'écran Réglages : un second appui ramène à l'accueil
+  document.getElementById('bouton-reglages').setAttribute('aria-pressed', String(surReglages));
 }
 
 // Fonctions de rendu de chaque écran
@@ -85,7 +95,16 @@ const RENDUS = {
 function rendre() {
   rendreEnTete();
   const conteneur = document.getElementById(`ecran-${etat.ecran}`);
-  RENDUS[etat.ecran]?.(conteneur, { donnees: etat.donnees, mois: etat.mois, moisCourant: moisCourant(), filtre: etat.filtre, actions });
+  RENDUS[etat.ecran]?.(conteneur, {
+    donnees: etat.donnees,
+    mois: etat.mois,
+    moisCourant: moisCourant(),
+    filtre: etat.filtre,
+    discret: etat.preferences.discret,
+    preferences: etat.preferences,
+    actions,
+  });
+  if (etat.ecran === 'accueil') animerAccueil(conteneur);
   document.querySelectorAll('.ecran').forEach((ecran) => {
     ecran.hidden = ecran.dataset.ecran !== etat.ecran;
   });
@@ -93,6 +112,52 @@ function rendre() {
     if (onglet.dataset.cible === etat.ecran) onglet.setAttribute('aria-current', 'page');
     else onglet.removeAttribute('aria-current');
   });
+}
+
+/* ===================== Animations de l'accueil ===================== */
+
+// Faut-il jouer l'animation d'entrée au prochain affichage de l'accueil ? (ouverture, onglet, mois)
+let entreePrevue = true;
+// Dernier solde affiché : le compteur part de là quand le solde change
+let soldeAffiche = null;
+const mouvementReduit = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+function animerAccueil(conteneur) {
+  const montant = conteneur.querySelector('.carte-solde__montant');
+  const cible = montant ? Number(montant.dataset.valeur) : null;
+  if (mouvementReduit.matches) {
+    soldeAffiche = cible;
+    entreePrevue = false;
+    return;
+  }
+  // Entrée : la classe déclenche les animations CSS (cartes, barres, pastille).
+  // Pour un simple rafraîchissement (ex. après un ajout), on l'enlève : sinon les nouvelles
+  // cartes, recréées dans le même conteneur, rejoueraient l'animation à chaque fois.
+  conteneur.classList.remove('entree');
+  if (entreePrevue) {
+    void conteneur.offsetWidth; // force le navigateur à « oublier » l'ancienne animation
+    conteneur.classList.add('entree');
+    entreePrevue = false;
+  }
+  if (montant) {
+    compter(montant, soldeAffiche ?? 0, cible);
+    soldeAffiche = cible;
+  }
+}
+
+// Fait défiler le solde de « depart » à « arrivee » (en centimes) en ~0,8 s, en ralentissant à la fin
+function compter(element, depart, arrivee) {
+  if (depart === arrivee) return;
+  const duree = 800;
+  const debut = performance.now();
+  const etape = (maintenant) => {
+    const t = Math.min(1, (maintenant - debut) / duree);
+    const lissage = 1 - (1 - t) ** 3; // « ease-out » cubique
+    const valeur = Math.round(depart + (arrivee - depart) * lissage);
+    element.replaceChildren(...montantAvecCentimes(formaterMontant(valeur)));
+    if (t < 1 && element.isConnected) requestAnimationFrame(etape);
+  };
+  requestAnimationFrame(etape);
 }
 
 /* ===================== Récurrences ===================== */
@@ -176,16 +241,17 @@ async function ajouterTransaction(valeurs) {
 }
 
 // Ouvre le formulaire d'ajout (bouton « + », ou boutons de l'écran Épargne)
-function ouvrirAjout(typeParDefaut = 'depense') {
+function ouvrirAjout(typeParDefaut = 'depense', categorieDemandee = null) {
   ouvrirFormulaireTransaction({
     categories: etat.donnees.categories,
     pea: etat.donnees.pea,
     typeParDefaut,
+    categorieDemandee,
     surValider: (valeurs) => validerTransaction(valeurs, null, async () => {
       await ajouterTransaction(valeurs);
       const libelle = MESSAGES[valeurs.type].ajout;
       const moisTransaction = moisBudgetaire(valeurs.date, etat.donnees.debutsMois);
-      afficherToast(moisTransaction !== etat.mois ? `${libelle} en ${nomDuMois(moisTransaction).toLowerCase()}` : libelle);
+      afficherToast(moisTransaction !== etat.mois ? `${libelle} en ${nomDuMois(moisTransaction).toLowerCase()}` : libelle, { coche: true });
       await rafraichir();
       fermerFeuille(); // la question éventuelle s'affiche une fois la saisie refermée
       await proposerNouveauMois(valeurs);
@@ -245,6 +311,23 @@ async function confirmerSuppression(transaction) {
   await rafraichir();
 }
 
+// Suppression rapide (ligne glissée vers la gauche) : pas de confirmation, mais « Annuler » pendant 5 s
+async function supprimerAvecAnnulation(transaction) {
+  if (!await executer(() => store.supprimerTransaction(transaction.id))) return;
+  await rafraichir();
+  afficherToast(MESSAGES[transaction.type].suppression, {
+    action: {
+      libelle: 'Annuler',
+      surClic: async () => {
+        if (await executer(() => store.restaurerTransaction(transaction))) {
+          afficherToast('Transaction restaurée', { coche: true });
+          await rafraichir();
+        }
+      },
+    },
+  });
+}
+
 // Ouvre le formulaire pré-rempli pour modifier une transaction
 function ouvrirModification(transaction) {
   const modele = etat.donnees.recurrentes.find((r) => r.id === transaction.recurrenteId) ?? null;
@@ -255,7 +338,7 @@ function ouvrirModification(transaction) {
     estRecurrente: modele !== null,
     surValider: (valeurs) => validerTransaction(valeurs, transaction.id, async () => {
       await enregistrerModification(transaction, modele, valeurs);
-      afficherToast('Transaction modifiée');
+      afficherToast('Transaction modifiée', { coche: true });
       await rafraichir();
     }),
     surSupprimer: () => confirmerSuppression(transaction),
@@ -608,6 +691,7 @@ async function toutEffacer() {
 // Les écrans n'appellent jamais store.js directement : ils passent par ces fonctions
 const actions = {
   modifierTransaction: ouvrirModification,
+  supprimerTransaction: supprimerAvecAnnulation,
   modifierBudget: ouvrirBudget,
   ajouterEpargne: ouvrirAjout,
   modifierCompte: ouvrirCompte,
@@ -628,12 +712,31 @@ const actions = {
     etat.filtre = categorieId;
     rendre();
   },
+  // Mode discret : masque tous les montants (mémorisé sur cet appareil)
+  basculerDiscret() {
+    changerPreference('discret', !etat.preferences.discret);
+  },
+  changerTheme(theme) {
+    changerPreference('theme', theme);
+  },
+  basculerFondAnime(actif) {
+    changerPreference('fondAnime', actif);
+  },
 };
+
+// Enregistre une préférence d'affichage, l'applique, puis redessine
+function changerPreference(nom, valeur) {
+  etat.preferences = enregistrerPreference(nom, valeur);
+  appliquerPreferences(etat.preferences);
+  definirMasquage(etat.preferences.discret);
+  rendre();
+}
 
 /* ===================== Navigation ===================== */
 
 // Change d'écran (onglets du bas)
 function changerEcran(nomEcran) {
+  if (nomEcran !== etat.ecran) entreePrevue = true;
   etat.ecran = nomEcran;
   rendre();
   window.scrollTo(0, 0);
@@ -643,6 +746,7 @@ function changerEcran(nomEcran) {
 function changerMois(n) {
   etat.mois = n === 0 ? moisCourant() : decalerMois(etat.mois, n);
   etat.filtre = null;
+  entreePrevue = true;
   rendre();
 }
 
@@ -655,6 +759,7 @@ function brancherEvenements() {
   document.getElementById('mois-precedent').addEventListener('click', () => changerMois(-1));
   document.getElementById('mois-suivant').addEventListener('click', () => changerMois(1));
   document.getElementById('mois-actuel').addEventListener('click', () => changerMois(0));
+  document.getElementById('bouton-reglages').addEventListener('click', () => changerEcran(etat.ecran === 'reglages' ? 'accueil' : 'reglages'));
   // Sur l'écran Épargne, le « + » propose directement de mettre de l'argent de côté
   document.getElementById('bouton-ajouter').addEventListener('click', () => ouvrirAjout(etat.ecran === 'epargne' ? 'epargne' : 'depense'));
 }
@@ -678,6 +783,10 @@ function surRetourDansApp() {
 
 // Lance l'application
 async function demarrer() {
+  appliquerPreferences(etat.preferences);
+  definirMasquage(etat.preferences.discret);
+  // En mode « Automatique », le thème suit le téléphone en direct
+  suivreThemeSysteme(() => appliquerPreferences(etat.preferences));
   brancherEvenements();
   surRetourDansApp();
   await executer(appliquerRecurrences);

@@ -2,7 +2,7 @@
 // Objectif : une saisie en 3 gestes → « + », taper le montant, toucher une catégorie, valider.
 
 import { creer, ouvrirFeuille, fermerFeuille } from './ui.js';
-import { parserMontant, centimesVersSaisie, formaterMontant } from './money.js';
+import { parserMontant, centimesVersSaisie, formaterMontantVisible as formaterMontant } from './money.js';
 import { aujourdhui, estDateValide, nomDuMois, dateLongue } from './dates.js';
 import { moisCommencantLe, bornesDebut } from './periodes.js';
 import { fraisDuVersement, TAUX_FRAIS_DEFAUT } from './pea.js';
@@ -150,9 +150,9 @@ function afficherErreur(formulaire, { erreur, champ }) {
  * - surValider(valeurs) : fonction async appelée avec les valeurs validées
  * - surSupprimer() : fonction async appelée au clic sur « Supprimer » (mode modification)
  */
-export function ouvrirFormulaireTransaction({ categories, pea = null, transaction = null, estRecurrente = false, typeParDefaut = 'depense', surValider, surSupprimer }) {
+export function ouvrirFormulaireTransaction({ categories, pea = null, transaction = null, estRecurrente = false, typeParDefaut = 'depense', categorieDemandee = null, surValider, surSupprimer }) {
   const modification = transaction !== null;
-  const initial = transaction ?? { type: typeParDefaut, montant: null, categorieId: null, date: aujourdhui(), note: '' };
+  const initial = transaction ?? { type: typeParDefaut, montant: null, categorieId: categorieDemandee, date: aujourdhui(), note: '' };
 
   const famille = typeDeCategorie(initial.type);
   const boutonValider = creer('button', { type: 'submit', class: 'bouton bouton--plein' }, libelleBouton(modification, initial.type));

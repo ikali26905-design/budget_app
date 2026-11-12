@@ -4,15 +4,16 @@
 // Elle redessine entièrement l'écran à partir des données (aucun état caché dans le DOM).
 // Les clics sont transmis à app.js via les fonctions de « actions ».
 
-import { creer, remplir, etatVide, badgeCategorie, icone } from './ui.js';
+import { creer, remplir, etatVide, badgeCategorie, icone, rendreGlissable } from './ui.js';
+import { THEMES } from './preferences.js';
 import { formaterMontant, formaterMontantCourt, formaterMontantSigne } from './money.js';
-import { nomDuMoisSeul, nomDuMois, deMois, libelleJour, aujourdhui, decalerMois, dateLongue, dateCourte, ecartJours } from './dates.js';
+import { nomDuMoisSeul, nomDuMois, libelleJour, aujourdhui, decalerMois, dateLongue, dateCourte, ecartJours } from './dates.js';
 import { resumerPea, serieEvolution, rappelNecessaire, avantageFiscal, trierReleves, totalFrais, TAUX_FRAIS_DEFAUT } from './pea.js';
 import { finPeriode, bornesDebut } from './periodes.js';
 import {
   transactionsDuMois, calculerTotaux, calculerSoldeCumule, calculerTotalParCategorie,
   calculerEtatBudget, pourcentage, grouperParJour, categoriesUtilisees, compterUtilisations,
-  calculerSoldesEpargne, estEpargne, montantDebite, ID_COMPTE_EPARGNE,
+  calculerSoldesEpargne, montantDebite, ID_COMPTE_EPARGNE,
 } from './calculs.js';
 import { creerGraphiqueBarres, creerJauge, infosNiveau, creerBarreProgression, creerGraphiqueEvolution } from './charts.js';
 
@@ -61,39 +62,57 @@ export function creerBlocJauge(titre, etat) {
 
 /* ===================== Accueil ===================== */
 
-// Carte principale : le solde du mois, en très grand
-function carteSolde(totaux, mois) {
+// Icônes « œil » ouvert / barré (mode discret)
+const OEIL = ['M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z', 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z'];
+const OEIL_BARRE = ['M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-2.2 3.2', 'M6.6 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6', 'M9.9 9.9a3 3 0 0 0 4.2 4.2', 'M3 3l18 18'];
+
+// Bouton « œil » : masque ou affiche tous les montants de l'app
+function boutonDiscret(discret, actions) {
+  return creer('button', {
+    type: 'button',
+    class: 'heros__oeil',
+    'aria-pressed': discret ? 'true' : 'false',
+    'aria-label': discret ? 'Afficher les montants' : 'Masquer les montants',
+    onclick: actions.basculerDiscret,
+  }, icone(...(discret ? OEIL_BARRE : OEIL)));
+}
+
+// Carte principale : le solde du compte en très grand, le solde du mois en pastille juste dessous
+function carteSolde(totaux, mois, cumul, discret, actions) {
   const positif = totaux.solde >= 0;
-  let message = 'Tu dépenses plus que tu ne gagnes ce mois-ci';
-  if (positif) message = totaux.solde > 0 ? 'Il te reste de la marge 👍' : 'Tu es à l’équilibre';
-  if (!positif && totaux.epargne > 0 && totaux.solde + totaux.epargne >= 0) message = 'Tu as mis de côté plus que ta marge du mois';
-  return creer('div', { class: 'carte carte-solde' },
-    creer('p', { class: 'carte-solde__label' }, `Solde ${deMois(mois)}`),
-    creer('p', { class: `carte-solde__montant montant ${positif ? '' : 'carte-solde__montant--negatif'}` },
-      (positif && totaux.solde > 0 ? '+' : '') + formaterMontant(totaux.solde)),
-    creer('p', { class: 'carte-solde__message' }, message),
-    creer('p', { class: 'aide' }, 'Revenus − dépenses − épargne'),
+  const totalHeros = (libelle, montant, symbole) => creer('div', { class: 'heros__total' },
+    creer('span', { class: 'heros__total-label' }, creer('span', { 'aria-hidden': 'true' }, symbole), ` ${libelle}`),
+    creer('span', { class: 'heros__total-montant montant' }, formaterMontantCourtArrondi(montant)));
+  // Chiffre principal : ce qu'il y a sur le compte (solde cumulé jusqu'à la fin du mois affiché)
+  return creer('div', { class: 'carte carte-solde heros' },
+    creer('div', { class: 'heros__entete' },
+      creer('p', { class: 'carte-solde__label' }, 'Solde du compte'),
+      boutonDiscret(discret, actions)),
+    creer('p', { class: `carte-solde__montant montant ${cumul < 0 ? 'carte-solde__montant--negatif' : ''}`, 'data-valeur': String(cumul) },
+      montantAvecCentimes(formaterMontant(cumul))),
+    creer('div', { class: 'heros__mois' },
+      creer('span', { class: `heros__puce ${positif ? '' : 'heros__puce--negatif'}` },
+        `${majuscule(nomDuMoisSeul(mois))} : ${(positif && totaux.solde > 0 ? '+' : '')}${formaterMontant(totaux.solde)}`)),
+    creer('div', { class: 'heros__totaux' },
+      totalHeros('Revenus', totaux.revenus, '↑'),
+      totalHeros('Dépenses', totaux.depenses, '↓'),
+      totalHeros('Épargne', totaux.epargne + totaux.frais, '⇢')), // frais de versement compris
   );
 }
 
-// Trois tuiles côte à côte : revenus, dépenses et épargne nette du mois
-function tuilesTotaux(totaux) {
-  const tuile = (libelle, montant, classe, symbole) => creer('div', { class: `tuile ${classe}` },
-    creer('p', { class: 'tuile__label' }, creer('span', { 'aria-hidden': 'true' }, symbole), ` ${libelle}`),
-    creer('p', { class: 'tuile__montant montant' }, formaterMontant(montant)));
-  return creer('div', { class: 'tuiles' },
-    tuile('Revenus', totaux.revenus, 'tuile--revenus', '↑'),
-    tuile('Dépenses', totaux.depenses, 'tuile--depenses', '↓'),
-    tuile('Épargne', totaux.epargne + totaux.frais, 'tuile--epargne', '⇢')); // frais de versement compris
+// « novembre » → « Novembre »
+function majuscule(texte) {
+  return texte.replace(/^./, (l) => l.toUpperCase());
 }
 
-// Ligne discrète : solde cumulé depuis la première transaction jusqu'à la fin du mois
-function ligneSoldeCumule(cumul, mois) {
-  return creer('div', { class: 'carte ligne-info' },
-    creer('span', {}, 'Solde cumulé', creer('br'),
-      creer('span', { class: 'aide' }, `jusqu’à fin ${nomDuMoisSeul(mois)}, épargne déduite`)),
-    creer('strong', { class: `montant ${cumul < 0 ? 'montant--negatif' : ''}` }, formaterMontant(cumul)),
-  );
+// « 1 234,56 € » → « 1 234 » en grand et « ,56 € » en plus petit (renvoie une liste d'éléments)
+export function montantAvecCentimes(texte) {
+  const virgule = texte.lastIndexOf(',');
+  const entier = virgule === -1 ? texte : texte.slice(0, virgule);
+  // En très grand et resserré, l'espace des milliers disparaît : chaque groupe de chiffres
+  // devient un <span> séparé par une marge (« 1 408 » reste lisible)
+  const groupes = entier.split(/[\s\u00a0\u202f]/).map((g, i) => creer('span', { class: i > 0 ? 'milliers' : null }, g));
+  return virgule === -1 ? groupes : [...groupes, creer('span', { class: 'centimes' }, texte.slice(virgule))];
 }
 
 // Carte du budget global (si défini), avec sa jauge
@@ -128,26 +147,25 @@ function carteRepartition(duMois, categorie) {
     creerGraphiqueBarres(lignes, 'Répartition des dépenses du mois par catégorie'));
 }
 
-// Écran d'accueil : solde du mois, totaux, solde cumulé, budget global, répartition
-export function rendreAccueil(conteneur, { donnees, mois, moisCourant, actions }) {
+// Écran d'accueil : solde du compte (avec le mois en pastille), budget global, répartition
+export function rendreAccueil(conteneur, { donnees, mois, moisCourant, discret, actions }) {
   const duMois = transactionsDuMois(donnees.transactions, mois, donnees.debutsMois);
   const cumul = calculerSoldeCumule(donnees.transactions, mois, donnees.debutsMois);
-  if (duMois.length === 0) {
-    remplir(conteneur,
-      creer('div', { class: 'carte' },
-        etatVide('🪙', 'Aucune transaction ce mois-ci, appuie sur +',
-          'Note tes dépenses et tes revenus au fil de l’eau : tu sauras toujours où tu en es.')),
-      donnees.transactions.length > 0 && ligneSoldeCumule(cumul, mois),
-      carteNouveauMois(donnees, mois, moisCourant, actions));
+  const totaux = calculerTotaux(duMois);
+  const vide = creer('div', { class: 'carte' },
+    etatVide('🪙', 'Aucune transaction ce mois-ci, appuie sur +',
+      'Note tes dépenses et tes revenus au fil de l’eau : tu sauras toujours où tu en es.'));
+  // Toute première utilisation : seulement l'invitation (un solde à 0 n'apprendrait rien)
+  if (donnees.transactions.length === 0) {
+    remplir(conteneur, vide);
     return;
   }
-  const totaux = calculerTotaux(duMois);
   remplir(conteneur,
-    carteSolde(totaux, mois),
-    tuilesTotaux(totaux),
-    carteBudgetGlobal(donnees, totaux),
-    carteRepartition(duMois, indexerCategories(donnees.categories)),
-    ligneSoldeCumule(cumul, mois),
+    carteSolde(totaux, mois, cumul, discret, actions),
+    duMois.length === 0 ? vide : [
+      carteBudgetGlobal(donnees, totaux),
+      carteRepartition(duMois, indexerCategories(donnees.categories)),
+    ],
     carteNouveauMois(donnees, mois, moisCourant, actions),
   );
 }
@@ -204,10 +222,11 @@ function noteTransaction(transaction) {
   return texte;
 }
 
-// Une ligne de transaction cliquable (ouvre la modification)
+// Une ligne de transaction : un toucher ouvre la modification ;
+// glissée vers la droite elle s'ouvre aussi, vers la gauche elle est supprimée (avec « Annuler »)
 function ligneTransaction(transaction, categorie, actions) {
   const recurrente = transaction.recurrenteId !== null;
-  return creer('li', {},
+  const ligne = creer('li', {},
     creer('button', {
       type: 'button',
       class: 'ligne-transaction',
@@ -223,6 +242,12 @@ function ligneTransaction(transaction, categorie, actions) {
     creer('span', { class: `ligne-transaction__montant montant ${CLASSES_MONTANT[transaction.type]}` },
       formaterMontantSigne(montantDebite(transaction), transaction.type)),
     ));
+  return rendreGlissable(ligne, {
+    libelleGauche: 'Supprimer',
+    surGauche: () => actions.supprimerTransaction(transaction),
+    libelleDroite: 'Modifier',
+    surDroite: () => actions.modifierTransaction(transaction),
+  });
 }
 
 // Un groupe « jour » : titre (Aujourd'hui, Hier, Lundi 5 octobre) + ses transactions
@@ -251,7 +276,7 @@ export function rendreHistorique(conteneur, { donnees, mois, filtre, actions }) 
   const visibles = filtreActif ? duMois.filter((t) => t.categorieId === filtreActif) : duMois;
   remplir(conteneur,
     barreFiltres(utilisees, filtreActif, actions),
-    filtreActif ? resumeFiltre(visibles, categorie(filtreActif)) : creer('p', { class: 'aide aide--centre' }, 'Touche une transaction pour la modifier ou la supprimer.'),
+    filtreActif ? resumeFiltre(visibles, categorie(filtreActif)) : creer('p', { class: 'aide aide--centre' }, 'Touche une transaction pour la modifier. Glisse-la vers la gauche pour la supprimer.'),
     grouperParJour(visibles).map((g) => groupeJour(g, categorie, actions)),
   );
 }
@@ -269,7 +294,7 @@ function carteBudgetGlobalEditable(donnees, totalDepenses, actions) {
   }
   const etat = calculerEtatBudget(totalDepenses, donnees.budgetGlobal);
   return creer('button', { type: 'button', class: 'carte carte--bouton', onclick: () => actions.modifierBudget(null), 'aria-label': `Modifier le budget global, ${formaterMontant(etat.depense)} sur ${formaterMontant(etat.plafond)}` },
-    creerBlocJauge('Budget global du mois', etat));
+    creerBlocJauge('Budget global', etat));
 }
 
 // Ligne d'une catégorie avec plafond : jauge cliquable
@@ -407,41 +432,84 @@ function sectionSauvegarde(actions) {
   ];
 }
 
-// Écran Réglages : catégories, transactions mensuelles, sauvegarde
-export function rendreReglages(conteneur, { donnees, actions }) {
+// Section « Apparence » : thème (Automatique / Clair / Sombre) et animation du fond
+function sectionApparence(preferences, actions) {
+  const option = ([valeur, texte]) => [
+    creer('input', {
+      type: 'radio', name: 'theme', id: `theme-${valeur}`, value: valeur,
+      checked: preferences.theme === valeur,
+      onchange: () => actions.changerTheme(valeur),
+    }),
+    creer('label', { for: `theme-${valeur}` }, texte),
+  ];
+  return [
+    creer('h2', { class: 'titre-section' }, 'Apparence'),
+    creer('div', { class: 'carte' },
+      creer('p', { class: 'aide aide--sous-champ' }, 'Thème'),
+      creer('div', { class: 'segment', role: 'radiogroup', 'aria-label': 'Thème' }, THEMES.map(option)),
+      creer('label', { class: 'interrupteur' },
+        creer('span', {}, 'Animer le fond'),
+        creer('input', {
+          type: 'checkbox', role: 'switch', checked: preferences.fondAnime,
+          onchange: (evenement) => actions.basculerFondAnime(evenement.target.checked),
+        })),
+      creer('p', { class: 'aide' }, 'Le mode discret (masquer les montants) s’active avec l’œil, sur l’accueil.')),
+  ];
+}
+
+// Écran Réglages : apparence, catégories, transactions mensuelles, débuts de mois, sauvegarde
+export function rendreReglages(conteneur, { donnees, preferences, actions }) {
   remplir(conteneur,
+    sectionApparence(preferences, actions),
     sectionCategories('Catégories de dépenses', 'depense', donnees, actions),
     sectionCategories('Catégories de revenus', 'revenu', donnees, actions),
     sectionRecurrentes(donnees, actions),
     sectionDebutsMois(donnees, actions),
     sectionSauvegarde(actions),
-    creer('p', { class: 'aide a-propos' }, 'Mon Budget · version 1.0', creer('br'), 'Aucun compte, aucun serveur : tout reste sur ton téléphone.'),
+    creer('p', { class: 'aide a-propos' }, 'Mon Budget · version 1.1', creer('br'), 'Aucun compte, aucun serveur : tout reste sur ton téléphone.'),
   );
 }
 
 /* ===================== Épargne ===================== */
 
-// Carte principale : total épargné (tous comptes) et mouvement net du mois
-function carteTotalEpargne(total, netDuMois, fraisDuMois, mois, plusValuePea, actions) {
-  let resume = `Rien mis de côté en ${nomDuMoisSeul(mois)}`;
-  if (netDuMois > 0) resume = `+${formaterMontant(netDuMois)} mis de côté ce mois-ci`;
-  if (netDuMois > 0 && fraisDuMois > 0) resume += ` (+${formaterMontant(fraisDuMois)} de frais)`;
-  if (netDuMois < 0) resume = `${formaterMontant(-netDuMois)} retirés ce mois-ci`;
-  return creer('div', { class: 'carte carte-solde' },
-    creer('p', { class: 'carte-solde__label' }, `Épargne totale fin ${nomDuMoisSeul(mois)}`),
-    creer('p', { class: 'carte-solde__montant montant' }, formaterMontant(total)),
-    creer('p', { class: 'carte-solde__message' }, resume),
-    plusValuePea !== null && creer('p', { class: 'aide' },
-      `dont ${texteMontantSigne(plusValuePea)} de ${plusValuePea >= 0 ? 'plus' : 'moins'}-value latente sur le PEA`),
-    creer('div', { class: 'actions-ligne' },
-      creer('button', { type: 'button', class: 'bouton', onclick: () => actions.ajouterEpargne('epargne') }, 'Mettre de côté'),
-      creer('button', { type: 'button', class: 'bouton bouton--secondaire', onclick: () => actions.ajouterEpargne('retrait') }, 'Retirer')),
+// Mouvement net d'un compte sur le mois : versements − retraits (hors frais)
+function netDuMoisPour(duMois, compteId) {
+  let net = 0;
+  for (const t of duMois) {
+    if (t.categorieId !== compteId) continue;
+    if (t.type === 'epargne') net += t.montant;
+    if (t.type === 'retrait') net -= t.montant;
+  }
+  return net;
+}
+
+// Pastille du mois : « Novembre : +150,00 € » (verte), « −40,00 € » (rouge) ou « rien ce mois-ci » (neutre)
+function puceDuMois(mois, net) {
+  const nom = majuscule(nomDuMoisSeul(mois));
+  if (net === 0) return creer('span', { class: 'heros__puce heros__puce--neutre' }, `${nom} : aucun mouvement`);
+  return creer('span', { class: `heros__puce ${net < 0 ? 'heros__puce--negatif' : ''}` }, `${nom} : ${texteMontantSigne(net)}`);
+}
+
+// Carte « héros » du compte épargne : solde en grand, mouvement du mois, objectif, boutons rapides
+function carteCompteEpargne(compte, solde, soldeInitial, objectif, net, mois, actions) {
+  return creer('div', { class: 'carte carte-solde heros' },
+    creer('div', { class: 'heros__entete' },
+      creer('p', { class: 'carte-solde__label' }, `${compte.emoji} Compte épargne`),
+      creer('button', { type: 'button', class: 'heros__lien', onclick: () => actions.modifierCompte(compte.id) }, 'Modifier')),
+    creer('p', { class: 'carte-solde__montant montant' }, montantAvecCentimes(formaterMontant(solde))),
+    creer('div', { class: 'heros__mois' }, puceDuMois(mois, net)),
+    objectif
+      ? creer('div', { class: 'heros__objectif' }, blocObjectif(solde, objectif, 'var(--heros-texte)', compte.nom))
+      : creer('button', { type: 'button', class: 'heros__lien heros__lien--bloc', onclick: () => actions.modifierCompte(compte.id) },
+        soldeInitial ? '+ Fixer un objectif' : '+ Indiquer le solde actuel et un objectif'),
+    creer('div', { class: 'heros__actions' },
+      creer('button', { type: 'button', class: 'bouton', onclick: () => actions.ajouterEpargne('epargne', compte.id) }, 'Verser'),
+      creer('button', { type: 'button', class: 'bouton bouton--secondaire', onclick: () => actions.ajouterEpargne('retrait', compte.id) }, 'Retirer')),
   );
 }
 
-// Bloc objectif d'un compte : barre de progression + « 32 % · reste 680 € » (ou invitation)
+// Bloc objectif d'un compte : barre de progression + « 32 % · reste 680 € »
 function blocObjectif(solde, objectif, couleur, nom) {
-  if (!objectif) return creer('span', { class: 'lien-action' }, 'Définir un objectif');
   const atteint = solde >= objectif;
   const pourcent = pourcentage(Math.max(solde, 0), objectif);
   return creer('span', { class: 'objectif' },
@@ -451,44 +519,18 @@ function blocObjectif(solde, objectif, couleur, nom) {
       creer('span', { class: 'montant' }, atteint ? 'Objectif atteint 🎉' : `Reste ${formaterMontantCourt(objectif - solde)}`)));
 }
 
-// Ligne d'un compte d'épargne cliquable (ouvre la feuille : solde de départ + objectif)
-function ligneCompte(compte, solde, soldeInitial, objectif, actions) {
-  return creer('li', {},
-    creer('button', { type: 'button', class: 'ligne-compte', onclick: () => actions.modifierCompte(compte.id) },
-      creer('span', { class: 'ligne-compte__haut' },
-        badgeCategorie(compte),
-        creer('span', { class: 'ligne-transaction__texte' },
-          creer('span', { class: 'ligne-transaction__nom' }, compte.nom),
-          soldeInitial && creer('span', { class: 'ligne-transaction__note' }, `dont ${formaterMontantCourt(soldeInitial)} de départ`)),
-        creer('strong', { class: 'montant' }, formaterMontant(solde))),
-      soldeInitial || objectif
-        ? blocObjectif(solde, objectif, `var(--serie-${compte.couleur})`, compte.nom)
-        : creer('span', { class: 'lien-action' }, 'Indiquer le solde actuel')));
-}
-
-// Écran Épargne : total, boutons rapides, le compte « Épargne » puis la section PEA
+// Écran Épargne : deux cartes séparées, le compte épargne puis le PEA (ce ne sont pas les mêmes placements)
 export function rendreEpargne(conteneur, { donnees, mois, actions }) {
   const fin = finPeriode(mois, donnees.debutsMois);
   const soldes = calculerSoldesEpargne(donnees.transactions, { dateLimite: fin, soldesInitiaux: donnees.soldesInitiaux });
   const pea = donnees.pea;
   const compte = donnees.categories.find((c) => c.id === ID_COMPTE_EPARGNE);
-  const soldeCompte = soldes.get(ID_COMPTE_EPARGNE) ?? 0;
+  const duMois = transactionsDuMois(donnees.transactions, mois, donnees.debutsMois);
   const resume = pea ? resumerPea(pea, donnees.transactions, donnees.soldesInitiaux[pea.compteId] ?? 0, fin) : null;
-  // Total : compte épargne + valeur réelle du PEA (ou ce qui y a été investi s'il n'y a pas encore de relevé)
-  const totalPea = resume ? (resume.valeur ?? resume.investi) : 0;
-  const total = soldeCompte + totalPea;
-  const totauxDuMois = calculerTotaux(transactionsDuMois(donnees.transactions, mois, donnees.debutsMois));
-  // Message d'explication tant que l'épargne n'a jamais été utilisée
-  const aucunMouvement = !donnees.transactions.some((t) => estEpargne(t.type)) && Object.keys(donnees.soldesInitiaux).length === 0;
   remplir(conteneur,
-    carteTotalEpargne(total, totauxDuMois.epargne, totauxDuMois.frais, mois, resume?.plusValue?.montant ?? null, actions),
-    aucunMouvement && creer('p', { class: 'aide aide--centre' },
-      'Mets de l’argent de côté pour un projet ou les imprévus : il est déduit de ton solde du mois et s’accumule ici.'),
-    creer('h2', { class: 'titre-section' }, 'Compte épargne'),
-    creer('ul', { class: 'liste carte carte--liste' },
-      ligneCompte(compte, soldeCompte, donnees.soldesInitiaux[ID_COMPTE_EPARGNE], donnees.objectifs[ID_COMPTE_EPARGNE], actions)),
-    creer('p', { class: 'aide aide--centre' }, 'Touche le compte pour indiquer ce qu’il contient déjà et ton objectif.'),
-    sectionPea(donnees, resume, actions),
+    carteCompteEpargne(compte, soldes.get(ID_COMPTE_EPARGNE) ?? 0, donnees.soldesInitiaux[ID_COMPTE_EPARGNE],
+      donnees.objectifs[ID_COMPTE_EPARGNE], netDuMoisPour(duMois, ID_COMPTE_EPARGNE), mois, actions),
+    sectionPea(donnees, resume, netDuMoisPour(duMois, pea?.compteId), actions),
   );
 }
 
@@ -525,20 +567,6 @@ function ligneAvantageFiscal(dateOuverture) {
       : `⏳ Avantage fiscal dans ${texteDuree(avantage.moisRestants)} (${dateLongue(avantage.dateAcquisition)} ${avantage.dateAcquisition.slice(0, 4)})`);
 }
 
-// Chiffres clés : valeur, investi, plus-value
-function chiffresPea(resume) {
-  const pv = resume.plusValue;
-  return creer('dl', { class: 'pea__chiffres' },
-    creer('div', {}, creer('dt', {}, 'Valeur'),
-      creer('dd', { class: 'pea__valeur montant' }, resume.valeur === null ? '—' : formaterMontant(resume.valeur))),
-    creer('div', {}, creer('dt', {}, 'Investi'), creer('dd', { class: 'montant' }, formaterMontant(resume.investi))),
-    creer('div', {}, creer('dt', {}, pv && pv.montant < 0 ? 'Moins-value' : 'Plus-value'),
-      creer('dd', { class: `montant ${pv ? (pv.montant >= 0 ? 'montant--revenu' : 'montant--negatif') : ''}` },
-        pv ? texteMontantSigne(pv.montant) : '—',
-        pv?.pourMille !== null && pv?.pourMille !== undefined && creer('span', { class: 'pea__pourcent' }, ` (${textePourcentDixiemes(pv.pourMille)})`))),
-  );
-}
-
 // Mention du dernier relevé, mise en avant s'il faut refaire le point
 function ligneDernierReleve(pea, resume) {
   const enRetard = rappelNecessaire(pea.releves, aujourdhui());
@@ -572,33 +600,66 @@ function historiqueReleves(pea, actions) {
         creer('strong', { class: 'montant' }, formaterMontant(r.valeur)))))));
 }
 
-// Section PEA complète (ou invitation à l'activer)
-function sectionPea(donnees, resume, actions) {
+// Texte court de l'avantage fiscal, pour la carte : « avr. 2029 » (date des 5 ans) ou « Acquis ✓ »
+function texteFiscalCourt(dateOuverture) {
+  if (!dateOuverture) return '—';
+  const avantage = avantageFiscal(dateOuverture, aujourdhui());
+  if (avantage.acquis) return 'Acquis ✓';
+  // « avr. 2029 » : la date où les 5 ans seront atteints
+  const [annee, mois] = avantage.dateAcquisition.split('-');
+  return `${new Date(Number(annee), Number(mois) - 1, 1).toLocaleDateString('fr-FR', { month: 'short' })} ${annee}`;
+}
+
+// Carte « héros » du PEA : valeur en grand, plus-value en pastille, investi / frais / fiscalité
+function cartePea(pea, resume, transactions, actions) {
+  const pv = resume.plusValue;
+  const valeur = resume.valeur ?? resume.investi;
+  const pastille = pv
+    ? creer('span', { class: `heros__puce ${pv.montant < 0 ? 'heros__puce--negatif' : ''}` },
+      `${pv.montant < 0 ? 'Moins' : 'Plus'}-value : ${texteMontantSigne(pv.montant)}`,
+      pv.pourMille !== null && pv.pourMille !== undefined ? ` (${textePourcentDixiemes(pv.pourMille)})` : '')
+    : creer('span', { class: 'heros__puce heros__puce--neutre' }, 'Fais un premier relevé');
+  const total = (libelle, texte) => creer('div', { class: 'heros__total' },
+    creer('span', { class: 'heros__total-label' }, libelle),
+    creer('span', { class: 'heros__total-montant montant' }, texte));
+  return creer('div', { class: 'carte carte-solde heros' },
+    creer('div', { class: 'heros__entete' },
+      creer('p', { class: 'carte-solde__label' }, `📈 PEA${resume.valeur !== null && resume.releve && resume.valeur !== resume.releve.valeur ? ' · valeur estimée' : ''}`),
+      creer('button', { type: 'button', class: 'heros__lien', onclick: actions.parametresPea }, 'Paramètres')),
+    creer('p', { class: 'carte-solde__montant montant' }, montantAvecCentimes(formaterMontant(valeur))),
+    creer('div', { class: 'heros__mois' }, pastille),
+    creer('div', { class: 'heros__totaux' },
+      total('Investi', formaterMontantCourtArrondi(resume.investi)),
+      total('Frais payés', formaterMontantCourtArrondi(totalFrais(transactions, pea.compteId))),
+      total('5 ans le', texteFiscalCourt(pea.dateOuverture))),
+    creer('div', { class: 'heros__actions' },
+      creer('button', { type: 'button', class: 'bouton', onclick: () => actions.ajouterReleve() }, 'Faire le point'),
+      creer('button', { type: 'button', class: 'bouton bouton--secondaire', onclick: () => actions.ajouterEpargne('epargne', pea.compteId) }, 'Verser')),
+  );
+}
+
+// Section PEA : la carte héros, puis une carte de détails (relevé, graphique, historique)
+function sectionPea(donnees, resume, net, actions) {
   const pea = donnees.pea;
   if (!pea) {
-    return [
-      creer('h2', { class: 'titre-section' }, 'PEA'),
-      creer('div', { class: 'carte carte-nouveau-mois' },
-        creer('p', {}, creer('strong', {}, '📈 Suis ton PEA'), creer('br'),
-          creer('span', { class: 'aide' }, 'Relève sa valeur chaque mois pour voir ta plus-value et son évolution.')),
-        creer('button', { type: 'button', class: 'bouton bouton--secondaire bouton--plein', onclick: actions.parametresPea }, 'Ajouter mon PEA')),
-    ];
+    return creer('div', { class: 'carte carte-nouveau-mois' },
+      creer('p', {}, creer('strong', {}, '📈 Suis ton PEA'), creer('br'),
+        creer('span', { class: 'aide' }, 'Relève sa valeur chaque mois pour voir ta plus-value et son évolution.')),
+      creer('button', { type: 'button', class: 'bouton bouton--secondaire bouton--plein', onclick: actions.parametresPea }, 'Ajouter mon PEA'));
   }
   const serie = serieEvolution(pea, donnees.transactions, donnees.soldesInitiaux[pea.compteId] ?? 0);
   return [
-    creer('h2', { class: 'titre-section' }, '📈 PEA'),
+    cartePea(pea, resume, donnees.transactions, actions),
     creer('div', { class: 'carte pea' },
-      chiffresPea(resume),
-      ligneDernierReleve(pea, resume),
-      creer('button', { type: 'button', class: 'bouton bouton--plein', onclick: () => actions.ajouterReleve() }, 'Faire le point'),
-      ligneAvantageFiscal(pea.dateOuverture),
-      ligneFrais(pea, donnees.transactions),
+      creer('h2', { class: 'carte__titre' }, 'Évolution'),
       serie.length >= 2
         ? creerGraphiqueEvolution(serie, { formaterMontant: formaterMontantCourtArrondi, formaterDate: dateCourte })
         : creer('p', { class: 'aide' }, 'Le graphique d’évolution apparaîtra à partir de 2 relevés.'),
-      historiqueReleves(pea, actions),
-      creer('button', { type: 'button', class: 'lien-discret pea__parametres', onclick: actions.parametresPea }, 'Paramètres du PEA'),
-    ),
+      ligneDernierReleve(pea, resume),
+      net > 0 && creer('p', { class: 'aide' }, `${formaterMontant(net)} versés ce mois-ci`),
+      ligneAvantageFiscal(pea.dateOuverture),
+      ligneFrais(pea, donnees.transactions),
+      historiqueReleves(pea, actions)),
   ];
 }
 

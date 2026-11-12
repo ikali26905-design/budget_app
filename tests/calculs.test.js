@@ -350,3 +350,21 @@ test('migration : un seul compte « Épargne » (+ PEA), sans perdre d’argent'
   assert.deepEqual(neuves.categories.filter((x) => x.type === 'epargne').map((x) => x.id), ['epargne']);
   assert.equal(neuves.pea, null);
 });
+
+test('formaterMontant : espace insécable classique (DM Sans n’a pas l’espace fine)', () => {
+  assert.ok(!m.formaterMontant(123456).includes(' '));
+  assert.ok(!m.formaterMontantCourt(150000).includes(' '));
+});
+
+test('mode discret : tous les montants sont masqués, sauf dans les formulaires', () => {
+  m.definirMasquage(true);
+  try {
+    assert.equal(m.formaterMontant(123456), '••• €');
+    assert.equal(m.formaterMontantCourt(25000), '••• €');
+    assert.equal(m.formaterMontantSigne(4000, 'revenu'), '+••• €');
+    assert.equal(m.formaterMontantVisible(1250).replace(/\s/g, ' '), '12,50 €');
+  } finally {
+    m.definirMasquage(false);
+  }
+  assert.equal(m.formaterMontant(1250).replace(/\s/g, ' '), '12,50 €');
+});

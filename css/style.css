@@ -57,34 +57,33 @@
   --police: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
-/* Thème sombre : suit automatiquement le réglage du téléphone */
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --fond: #121211;
-    --surface: #1e1e1d;
-    --surface-2: #2e2e2c;
-    --bordure: rgba(255, 255, 255, 0.10);
-    --texte: #ffffff;
-    --texte-2: #c3c2b7;
-    --texte-3: #a3a29a;
-    --accent: #ffffff;
-    --accent-texte: #0b0b0b;
-    --accent-doux: #3a3a37;
-    --accent-actif: #ffffff;
-    --lien: #ffffff;
-    --positif: #3fc23f;
-    --negatif: #ff8a8a;
-    --serie-1: #3987e5;
-    --serie-2: #d95926;
-    --serie-3: #199e70;
-    --serie-4: #c98500;
-    --serie-5: #d55181;
-    --serie-6: #008300;
-    --serie-7: #9085e9;
-    --serie-8: #e66767;
-    --ombre: 0 1px 2px rgba(0, 0, 0, 0.4);
-  }
+/* Thème sombre. L'attribut data-theme est posé sur <html> par js/theme-initial.js avant le premier affichage :
+   en mode « Automatique » il suit le téléphone, mais on peut aussi forcer Clair ou Sombre dans les Réglages. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --fond: #121211;
+  --surface: #1e1e1d;
+  --surface-2: #2e2e2c;
+  --bordure: rgba(255, 255, 255, 0.10);
+  --texte: #ffffff;
+  --texte-2: #c3c2b7;
+  --texte-3: #a3a29a;
+  --accent: #ffffff;
+  --accent-texte: #0b0b0b;
+  --accent-doux: #3a3a37;
+  --accent-actif: #ffffff;
+  --lien: #ffffff;
+  --positif: #3fc23f;
+  --negatif: #ff8a8a;
+  --serie-1: #3987e5;
+  --serie-2: #d95926;
+  --serie-3: #199e70;
+  --serie-4: #c98500;
+  --serie-5: #d55181;
+  --serie-6: #008300;
+  --serie-7: #9085e9;
+  --serie-8: #e66767;
+  --ombre: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 /* ---------- 2. Base ---------- */
@@ -773,59 +772,8 @@ svg {
   color: var(--negatif);
 }
 
-.carte-solde__message {
-  color: var(--texte-2);
-}
-
-.tuiles {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.tuile {
-  background: var(--surface);
-  border-radius: var(--rayon);
-  box-shadow: var(--ombre);
-  padding: 12px 10px;
-  min-width: 0;
-}
-
-.tuile__label {
-  color: var(--texte-2);
-  font-size: clamp(0.75rem, 3.4vw, 0.875rem);
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.tuile--revenus .tuile__label span {
-  color: var(--positif);
-}
-
-.tuile--depenses .tuile__label span {
-  color: var(--negatif);
-}
-
-.tuile__montant {
-  /* 3 tuiles côte à côte : la taille s'adapte à la largeur de l'écran */
-  font-size: clamp(0.9375rem, 4.2vw, 1.25rem);
-  font-weight: 700;
-}
-
-.tuile--epargne .tuile__label span {
-  color: var(--texte-2);
-}
-
 .montant--epargne {
   color: var(--texte-2);
-}
-
-.ligne-info {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
 }
 
 /* ---------- 15. Graphique en barres ---------- */
@@ -1193,51 +1141,8 @@ svg {
 }
 
 /* ---------- 20. Épargne ---------- */
-.actions-ligne {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.actions-ligne .bouton {
-  padding: 0 8px;
-  white-space: nowrap;
-}
-
-.ligne-compte {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 100%;
-  padding: 12px 16px;
-  border: 0;
-  background: none;
-  text-align: left;
-}
-
-.ligne-compte:active {
-  background: var(--surface-2);
-}
-
-.ligne-compte__haut {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.ligne-compte__haut .ligne-transaction__nom {
-  flex: 1;
-  min-width: 0;
-}
-
 .objectif {
   display: block;
-}
-
-/* « dont 1 200 € de départ » : passe à la ligne plutôt que d'être tronqué */
-.ligne-compte .ligne-transaction__note {
-  white-space: normal;
 }
 
 .objectif__pied {
@@ -1254,35 +1159,6 @@ svg {
   display: flex;
   flex-direction: column;
   gap: 14px;
-}
-
-/* Trois chiffres clés côte à côte : valeur, investi, plus-value */
-.pea__chiffres {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin: 0;
-}
-
-.pea__chiffres dt {
-  color: var(--texte-2);
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
-.pea__chiffres dd {
-  margin: 2px 0 0;
-  font-weight: 700;
-  font-size: clamp(0.9375rem, 4.2vw, 1.125rem);
-}
-
-.pea__valeur {
-  font-size: clamp(1.0625rem, 4.8vw, 1.25rem);
-}
-
-.pea__pourcent {
-  display: block;
-  font-size: 0.8125rem;
 }
 
 .pea__rappel {
@@ -1335,10 +1211,6 @@ svg {
   background: var(--surface-2);
   font-size: 0.875rem;
   font-weight: 600;
-}
-
-.pea__parametres {
-  align-self: center;
 }
 
 /* Graphique d'évolution */
@@ -1450,16 +1322,443 @@ svg {
   text-align: center;
 }
 
-/* ---------- 22. Écrans larges (ordinateur) ---------- */
+/* ==========================================================================
+   22. Interface moderne
+   Les règles ci-dessous affinent les sections précédentes (rayons, carte « héros »,
+   barre d'onglets flottante, fond en relief animé…). Elles sont regroupées ici
+   pour qu'on voie d'un coup d'œil ce qui donne son style actuel à l'app.
+   ========================================================================== */
+
+/* ----- 22.1 Police DM Sans (fichier intégré : fonctionne hors ligne, licence OFL dans fonts/) ----- */
+@font-face {
+  font-family: 'DM Sans';
+  src: url('../fonts/dm-sans.woff2') format('woff2');
+  font-weight: 100 1000;
+  font-display: swap; /* le texte s'affiche tout de suite avec la police système, puis bascule */
+}
+
+/* ----- 22.2 Variables ----- */
+:root {
+  --police: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --rayon: 22px;
+  --rayon-petit: 14px;
+  --fond: #f1f1ee;
+  --ombre: 0 1px 1px rgba(0, 0, 0, 0.03), 0 8px 24px rgba(0, 0, 0, 0.05);
+  --verre: rgba(255, 255, 255, 0.78);       /* barre d'onglets translucide */
+  /* Carte « héros » (grande carte en haut des écrans) : blanche en thème clair */
+  --heros-fond: #ffffff;
+  --heros-texte: #0b0b0b;
+  --heros-texte-2: #6b6a65;
+  --heros-trait: rgba(11, 11, 11, 0.08);
+  --heros-puce-fond: #e3f6e3;
+  --heros-puce-texte: #0a6b0a;
+  --heros-puce-neg-fond: #fde8e8;
+  --heros-puce-neg-texte: #b42323;
+}
+:root[data-theme="dark"] {
+  --fond: #000000;
+  --surface: #18181b;
+  --surface-2: #2a2a2e;
+  --ombre: none;
+  --verre: rgba(28, 28, 30, 0.78);
+  --heros-fond: linear-gradient(145deg, #3a3a3c 0%, #1f1f21 55%, #111112 100%);
+  --heros-texte: #ffffff;
+  --heros-texte-2: rgba(255, 255, 255, 0.68);
+  --heros-trait: rgba(255, 255, 255, 0.12);
+  --heros-puce-fond: rgba(63, 194, 63, 0.18);
+  --heros-puce-texte: #7ee07e;
+  --heros-puce-neg-fond: rgba(255, 138, 138, 0.16);
+  --heros-puce-neg-texte: #ff9c9c;
+}
+
+body {
+  background: var(--fond);
+  letter-spacing: -0.01em;
+  /* place pour la barre d'onglets flottante */
+  padding-bottom: calc(96px + env(safe-area-inset-bottom) + 24px);
+}
+body, button, input, select, textarea { font-family: var(--police); }
+
+/* ----- 22.3 Fond en relief : halos flous qui dérivent lentement ----- */
+/* Deux calques fixes derrière l'app (position: fixed marche aussi sur iPhone, contrairement à
+   background-attachment: fixed). Ils sont plus grands que l'écran (inset: -25 %) pour pouvoir
+   bouger sans laisser apparaître de bord. On n'anime que transform : c'est la carte graphique
+   qui fait le travail, ça ne coûte presque rien en batterie. */
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: -25%;
+  z-index: -1;
+  pointer-events: none;
+}
+body::before {
+  background:
+    radial-gradient(38% 30% at 22% 18%, rgba(110, 150, 255, 0.55) 0%, rgba(110, 150, 255, 0) 100%),
+    radial-gradient(42% 32% at 80% 60%, rgba(120, 215, 190, 0.40) 0%, rgba(120, 215, 190, 0) 100%),
+    var(--fond);
+  animation: derive-a 11s ease-in-out infinite alternate;
+}
+body::after {
+  background:
+    radial-gradient(36% 28% at 80% 18%, rgba(255, 150, 190, 0.50) 0%, rgba(255, 150, 190, 0) 100%),
+    radial-gradient(40% 30% at 20% 75%, rgba(255, 200, 130, 0.42) 0%, rgba(255, 200, 130, 0) 100%);
+  animation: derive-b 14s ease-in-out infinite alternate;
+}
+/* Thème sombre : fond noir et halos gris, sans couleur */
+:root[data-theme="dark"] body::before {
+  background:
+    radial-gradient(35% 28% at 25% 20%, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 100%),
+    radial-gradient(38% 30% at 78% 62%, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0) 100%),
+    var(--fond);
+}
+:root[data-theme="dark"] body::after {
+  background:
+    radial-gradient(32% 26% at 76% 22%, rgba(200, 200, 215, 0.29) 0%, rgba(200, 200, 215, 0) 100%),
+    radial-gradient(36% 28% at 22% 76%, rgba(190, 190, 205, 0.27) 0%, rgba(190, 190, 205, 0) 100%);
+}
+@keyframes derive-a {
+  from { transform: translate(-6%, -4%) scale(1); }
+  to { transform: translate(6%, 5%) scale(1.12); }
+}
+@keyframes derive-b {
+  from { transform: translate(5%, 4%) scale(1.08); }
+  to { transform: translate(-6%, -5%) scale(0.95); }
+}
+/* Interrupteur « Animer le fond » coupé dans les Réglages */
+:root[data-fond-fixe] body::before,
+:root[data-fond-fixe] body::after { animation: none; }
+
+/* ----- 22.4 En-tête : grand titre à gauche, flèches et réglages à droite, fond translucide ----- */
+.entete {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: calc(env(safe-area-inset-top) + 12px) 12px 8px 20px;
+  background: color-mix(in srgb, var(--fond) 55%, transparent);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+.nav-mois { flex: 1; min-width: 0; }
+.nav-mois__centre { align-items: flex-start; }
+.nav-mois__titre,
+.entete__titre {
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-align: left;
+  line-height: 1.1;
+}
+.nav-mois__titre { white-space: nowrap; }
+.nav-mois__annee { display: block; font-size: 0.8125rem; font-weight: 600; letter-spacing: 0; color: var(--texte-3); }
+.entete__titre { flex: 1; padding: 0; }
+.nav-mois__periode { text-align: left; }
+.nav-mois__fleches { display: flex; flex-shrink: 0; }
+.entete .bouton-icone {
+  width: 44px;
+  height: 44px;
+  margin-left: 6px;
+  background: var(--surface);
+  box-shadow: var(--ombre);
+}
+.entete__reglages[aria-pressed="true"] { background: var(--accent); color: var(--accent-texte); }
+.lien-discret { padding-left: 0; }
+
+/* ----- 22.5 Cartes, titres, listes ----- */
+.carte { padding: 20px; border-radius: var(--rayon); }
+.carte.liste, .carte--liste { padding: 4px 0; }
+.carte__titre { font-size: 1.0625rem; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 12px; }
+.titre-section {
+  text-transform: none;
+  letter-spacing: -0.02em;
+  font-size: 1.125rem;
+  color: var(--texte);
+  margin: 28px 4px 10px;
+}
+/* Thème sombre : cartes légèrement translucides (on devine le relief derrière), fin liseré */
+:root[data-theme="dark"] .carte:not(.heros) {
+  background: rgba(20, 20, 22, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+/* Listes groupées : séparateurs fins décalés après l'icône */
+.liste > li + li { border-top: 0; }
+.liste > li + li .ligne-transaction,
+.liste > li + li .ligne-budget { box-shadow: inset 0 1px 0 var(--bordure); }
+.ligne-transaction { padding: 10px 18px; min-height: 60px; }
+.jour__titre { text-transform: none; font-size: 0.9375rem; color: var(--texte-2); margin: 20px 6px 8px; }
+/* Badges de catégorie : carré aux coins arrondis, fond teinté */
+.badge {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  box-shadow: none;
+  background: color-mix(in srgb, var(--couleur) 18%, var(--surface));
+}
+/* Barres de graphique plus épaisses */
+.barre-svg { height: 10px; }
+.barre-svg rect { rx: 5px; }
+
+/* ----- 22.6 Boutons et champs ----- */
+.bouton { border-radius: 16px; min-height: 52px; font-size: 1.0625rem; }
+.pastille label { border-radius: 16px; }
+.segment { border-radius: 16px; }
+.segment label { border-radius: 12px; padding: 0 4px; font-size: 0.9375rem; letter-spacing: -0.02em; }
+.champ__input { border-radius: var(--rayon-petit); }
+
+/* ----- 22.7 Carte « héros » ----- */
+.heros {
+  background: var(--heros-fond);
+  color: var(--heros-texte);
+  text-align: left;
+  padding: 22px 20px 18px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 16px 40px rgba(30, 40, 80, 0.10);
+}
+:root[data-theme="dark"] .heros { border: 1px solid rgba(255, 255, 255, 0.10); box-shadow: none; }
+.heros .carte-solde__label { color: var(--heros-texte-2); margin: 0; }
+.heros .carte-solde__montant {
+  font-size: clamp(2.6rem, 13vw, 3.4rem);
+  letter-spacing: -0.045em;
+  margin: 6px 0 2px;
+}
+.heros .carte-solde__montant--negatif { color: var(--negatif); }
+/* Le gros chiffre est découpé en morceaux : à cette taille resserrée, l'espace des milliers disparaîtrait */
+.milliers { margin-left: 0.18em; }
+.centimes { font-size: 0.5em; font-weight: 700; letter-spacing: -0.02em; opacity: 0.75; }
+.heros__entete { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
+.heros__mois { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 8px; }
+.heros__puce {
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--heros-puce-fond);
+  color: var(--heros-puce-texte);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+}
+.heros__puce--negatif { background: var(--heros-puce-neg-fond); color: var(--heros-puce-neg-texte); }
+.heros__puce--neutre { background: var(--heros-trait); color: var(--heros-texte-2); }
+.heros__totaux {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--heros-trait);
+}
+.heros__total { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.heros__total-label { font-size: 0.75rem; color: var(--heros-texte-2); font-weight: 600; white-space: nowrap; }
+.heros__total-montant { font-size: 1.0625rem; font-weight: 700; white-space: nowrap; }
+.heros__lien {
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--heros-texte-2);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.heros__lien--bloc { display: block; margin-top: 6px; }
+.heros__objectif { margin-top: 14px; }
+.heros__objectif .objectif__pied { color: var(--heros-texte-2); }
+.heros__objectif .barre-svg__piste { fill: var(--heros-trait); }
+.heros__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+.heros__actions .bouton { width: 100%; }
+/* Bouton « œil » du mode discret */
+.heros__oeil {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: -8px -10px -8px 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--heros-texte-2);
+}
+.heros__oeil svg { width: 22px; height: 22px; }
+.heros__oeil[aria-pressed="true"] { color: var(--heros-texte); }
+
+/* ----- 22.8 Barre d'onglets flottante (effet verre), « + » au centre ----- */
+.onglets {
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  max-width: calc(var(--largeur-max) - 24px);
+  height: 68px;
+  padding: 0 6px;
+  grid-template-columns: 1fr 1fr 76px 1fr 1fr;
+  align-items: center;
+  border: 1px solid var(--bordure);
+  border-radius: 26px;
+  background: var(--verre);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+}
+.onglet { height: 100%; font-size: 0.6875rem; }
+.onglet[aria-current="page"] { color: var(--texte); }
+.onglet[aria-current="page"] svg { width: 24px; padding: 0; background: transparent; }
+/* Petit point sous l'onglet actif */
+.onglet[aria-current="page"] span::after {
+  content: '';
+  display: block;
+  width: 4px;
+  height: 4px;
+  margin: 3px auto 0;
+  border-radius: 50%;
+  background: currentColor;
+}
+.fab {
+  position: static;
+  justify-self: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 20px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s;
+}
+
+/* ----- 22.9 Feuille de saisie : montée avec un léger rebond, fermeture en glissant vers le bas ----- */
+.feuille { border-radius: 28px 28px 0 0; }
+.feuille[open] { animation: monter-rebond 0.42s cubic-bezier(0.32, 1.25, 0.5, 1); }
+@keyframes monter-rebond {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+/* Zone qu'on attrape pour faire glisser (poignée + titre) */
+.feuille__poignee { width: 44px; height: 5px; margin-top: 10px; }
+.feuille__poignee,
+.feuille__entete { touch-action: none; cursor: grab; }
+.feuille--glisse { transition: none; }
+.feuille--relache { transition: transform 0.25s ease-out; }
+
+/* ----- 22.10 Toast : coche animée, bouton « Annuler » ----- */
+.toast {
+  bottom: calc(96px + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.toast__coche { width: 22px; height: 22px; flex-shrink: 0; }
+.toast__coche circle { fill: var(--positif); }
+.toast__coche path {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* La coche se « dessine » : le trait est d'abord entièrement masqué par son propre pointillé */
+  stroke-dasharray: 16;
+  stroke-dashoffset: 16;
+}
+.toast--visible .toast__coche circle { animation: coche-rond 0.3s cubic-bezier(0.3, 1.5, 0.5, 1) both; transform-origin: center; }
+.toast--visible .toast__coche path { animation: coche-trait 0.35s 0.18s ease-out forwards; }
+@keyframes coche-rond { from { transform: scale(0.4); } to { transform: scale(1); } }
+@keyframes coche-trait { to { stroke-dashoffset: 0; } }
+.toast__action {
+  min-height: 36px;
+  margin: -6px -10px -6px 4px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fond) 22%, transparent);
+  color: var(--fond);
+  font-weight: 700;
+  pointer-events: auto;
+}
+.toast--visible:has(.toast__action) { pointer-events: auto; }
+
+/* ----- 22.11 Glisser une transaction (Historique) ----- */
+.glissable { position: relative; overflow: hidden; }
+.glissable > .ligne-transaction {
+  position: relative;
+  z-index: 1;
+  touch-action: pan-y; /* le défilement vertical reste au navigateur, l'horizontal est pour nous */
+}
+/* Pendant le geste seulement : la ligne devient opaque et les fonds colorés apparaissent dessous */
+.glissable--actif > .ligne-transaction { background: var(--surface); }
+.glissable:not(.glissable--actif) > .glissable__fond { visibility: hidden !important; }
+.glissable--relache > .ligne-transaction { transition: transform 0.25s ease-out; }
+/* Fonds révélés sous la ligne : « Modifier » à gauche, « Supprimer » à droite */
+.glissable__fond {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 22px;
+  font-weight: 700;
+  color: #ffffff;
+}
+.glissable__fond--modifier { background: #3a3a3c; }
+.glissable__fond--supprimer { background: var(--etat-depasse); justify-content: flex-end; }
+.glissable__fond span { opacity: 0.5; transition: opacity 0.15s; }
+.glissable--pret .glissable__fond span { opacity: 1; }
+
+/* ----- 22.12 Réglages : thème et interrupteurs ----- */
+.interrupteur {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: var(--hauteur-tactile);
+  font-weight: 600;
+}
+.interrupteur input {
+  appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  width: 52px;
+  height: 32px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--surface-2);
+  transition: background 0.2s;
+}
+.interrupteur input::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s;
+}
+.interrupteur input:checked { background: var(--accent); }
+.interrupteur input:checked::after { transform: translateX(20px); background: var(--accent-texte); }
+.interrupteur input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* ----- 22.13 Animations d'arrivée sur l'accueil ----- */
+/* La classe « entree » est ajoutée par app.js quand on ouvre l'app, change d'onglet ou de mois */
+.entree > .carte { animation: carte-monte 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.entree > .carte:nth-child(2) { animation-delay: 0.08s; }
+.entree > .carte:nth-child(3) { animation-delay: 0.16s; }
+.entree > .carte:nth-child(4) { animation-delay: 0.24s; }
+/* Les barres se remplissent depuis la gauche */
+.entree .barre-svg rect:not(.barre-svg__piste) {
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: barre-remplit 0.9s 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.entree .heros__puce { animation: puce-apparait 0.45s 0.5s cubic-bezier(0.3, 1.4, 0.5, 1) both; }
+@keyframes carte-monte {
+  from { opacity: 0; transform: translateY(18px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes barre-remplit { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes puce-apparait { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: none; } }
+
+/* ---------- 23. Écrans larges (ordinateur) ---------- */
 @media (min-width: 700px) {
   .contenu {
     padding-top: 16px;
-  }
-
-  .onglets {
-    border: 1px solid var(--bordure);
-    border-bottom: 0;
-    border-radius: var(--rayon) var(--rayon) 0 0;
   }
 
   /* Sur ordinateur, la feuille devient une fenêtre centrée */

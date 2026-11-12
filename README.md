@@ -1,18 +1,20 @@
 # Mon Budget
 
 Application web de suivi de budget personnel, pensée pour le téléphone et pour une utilisation à une main.
-En quelques secondes, tu sais où va ton argent ce mois-ci et s'il te reste de la marge.
+En quelques secondes, tu sais combien il y a sur ton compte et où va ton argent ce mois-ci.
 
-- **Accueil** : solde du mois en grand (revenus − dépenses − épargne), revenus, dépenses et épargne du mois, budget global, répartition des dépenses par catégorie, solde cumulé.
+- **Accueil** : le **solde du compte** en grand (solde cumulé jusqu'à la fin du mois affiché), le solde du mois en pastille juste dessous (revenus − dépenses − épargne), les revenus, dépenses et épargne du mois, le budget global et la répartition des dépenses par catégorie. À l'arrivée sur l'écran, les cartes apparaissent l'une après l'autre, le solde défile jusqu'à sa valeur et les barres se remplissent.
+- **Mode discret** : l'œil à côté du solde masque tous les montants de l'app (« ••• € »), pratique dans les transports. Le choix est mémorisé.
 - **Ajout rapide** : « + » → montant (clavier numérique) → catégorie → valider. La date du jour est déjà remplie.
-- **Historique** : transactions du mois groupées par jour, filtre par catégorie, modification, suppression avec confirmation.
-- **Épargne** : un **compte « Épargne » unique** (plus le PEA, ci-dessous). Tu y mets de l'argent de côté ou tu en retires ; l'écran affiche le total épargné, le solde du compte et un objectif facultatif avec sa barre de progression. Touche le compte pour indiquer son **solde de départ** (ce qu'il contenait avant d'utiliser l'app).
-- **PEA** : une section dédiée dans l'onglet Épargne. Les versements fonctionnent comme pour les autres comptes ; chaque mois, tu « fais le point » en relevant la **valeur réelle** du PEA. L'app affiche la plus ou moins-value (en € et en %), un graphique d'évolution (valeur vs montant investi), l'historique des relevés et le compte à rebours des 5 ans (avantage fiscal). Les **frais de versement** (1 % par défaut, réglables) sont pris en compte : pour 100 € versés, le PEA reçoit 100 € et 101 € sont déduits du budget.
+- **Historique** : transactions du mois groupées par jour, filtre par catégorie. Touche une ligne pour la modifier ; fais-la **glisser vers la gauche** pour la supprimer (bouton « Annuler » pendant 5 s) ou **vers la droite** pour la modifier.
+- **Épargne** : deux grandes cartes séparées, car ce ne sont pas les mêmes placements. Le **compte « Épargne » unique** : son solde, le mouvement du mois, un objectif facultatif avec sa barre de progression, et les boutons « Verser » / « Retirer ». « Modifier » permet d'indiquer son **solde de départ** (ce qu'il contenait avant d'utiliser l'app) et l'objectif.
+- **PEA** : sa propre carte dans l'onglet Épargne. Les versements fonctionnent comme pour le compte épargne ; chaque mois, tu « fais le point » en relevant la **valeur réelle** du PEA. La carte affiche la valeur, la plus ou moins-value (en € et en %), le montant investi, les frais payés et la date des 5 ans (avantage fiscal) ; en dessous, un graphique d'évolution (valeur vs montant investi) et l'historique des relevés. Les **frais de versement** (1 % par défaut, réglables) sont pris en compte : pour 100 € versés, le PEA reçoit 100 € et 101 € sont déduits du budget.
 - **Budgets** : plafond mensuel par catégorie et budget global. La barre est verte, devient orange à 80 % et rouge à 100 %.
 - **Transactions mensuelles** : la case « Chaque mois » répète automatiquement une transaction (loyer, bourse, abonnement…).
 - **Début des mois** : un mois peut commencer le jour où ta paye arrive (ex. octobre commence le 28 septembre). Quand tu saisis un revenu en fin de mois, l'app te propose de faire commencer le mois suivant ce jour-là. Les débuts se modifient ou se suppriment dans les Réglages.
-- **Réglages** : catégories personnalisées, début des mois, export JSON/CSV, import JSON.
-- **PWA** : l'app s'installe sur l'écran d'accueil et fonctionne hors connexion. Le thème clair ou sombre suit le réglage du téléphone.
+- **Réglages** (roue en haut à droite) : thème Automatique / Clair / Sombre, fond animé ou fixe, catégories personnalisées, début des mois, export JSON/CSV, import JSON.
+- **Interface** : police DM Sans, barre d'onglets flottante avec le « + » au centre, fond « en relief » (halos colorés en clair, gris sur fond noir en sombre) qui dérive lentement, fenêtres de saisie qui montent avec un léger rebond et se ferment en les glissant vers le bas, coche animée après un ajout.
+- **PWA** : l'app s'installe sur l'écran d'accueil et fonctionne hors connexion (police comprise).
 
 Technologies : HTML, CSS et JavaScript « vanilla » (modules ES), sans framework, sans dépendance et sans étape de build.
 Les graphiques sont dessinés en SVG fait maison.
@@ -85,23 +87,26 @@ Pour les transférer ou les sauvegarder, utilise **Réglages → Sauvegarder (JS
 
 ```
 budget_app/
-├── index.html          Structure de la page : en-tête, 4 écrans, onglets, bouton +, dialogues
+├── index.html          Structure de la page : en-tête, 5 écrans, onglets, bouton +, dialogues
 ├── manifest.json       Carte d'identité de la PWA (nom, icônes, couleurs, mode plein écran)
 ├── sw.js               Service worker : cache des fichiers pour le hors connexion
 ├── package.json        Uniquement pour « npm test » (aucune dépendance)
 ├── css/
 │   └── style.css       Variables de thème (clair/sombre), mise en page mobile-first, composants
 ├── icons/              Icône SVG + versions PNG (180, 192, 512 px)
+├── fonts/              Police DM Sans (woff2) et sa licence OFL
 ├── js/
 │   ├── app.js          Point d'entrée : état de l'interface, actions, navigation
-│   ├── store.js        Couche d'accès aux données : SEUL fichier qui touche à localStorage
+│   ├── store.js        Couche d'accès aux données de budget (localStorage)
+│   ├── preferences.js  Préférences d'affichage de l'appareil : thème, fond animé, mode discret
+│   ├── theme-initial.js Petit script du <head> : pose le thème avant l'affichage (pas de flash)
 │   ├── money.js        Montants : saisie → centimes → « 1 234,56 € »
 │   ├── dates.js        Dates « AAAA-MM-JJ » : mois suivant, noms de mois, « Hier »…
 │   ├── calculs.js      Calculs purs : totaux, soldes, état des budgets, récurrences
 │   ├── periodes.js     Mois « budgétaires » : à quel mois appartient une date selon les débuts de mois
 │   ├── pea.js          PEA : montant investi, valeur estimée, plus-value, avantage fiscal (fonctions pures)
 │   ├── charts.js       Graphiques SVG : barres de répartition et jauges de budget
-│   ├── ui.js           Briques d'interface : création d'éléments, feuille, confirmation, toast
+│   ├── ui.js           Briques d'interface : création d'éléments, feuille, confirmation, toast, ligne glissable
 │   ├── ecrans.js       Rendu des 5 écrans
 │   ├── formulaire.js   Feuilles de saisie : transaction, plafond/objectif, catégorie
 │   └── io.js           Export JSON/CSV, validation de l'import JSON
@@ -189,13 +194,16 @@ Toutes les données sont enregistrées sous **une seule clé** `localStorage` : 
 - **Début des mois.** Un mois sans début indiqué commence le 1er ; sinon il commence à la date indiquée et se termine la veille du début du mois suivant. Le début du mois M doit tomber entre le 15 du mois précédent et le 14 du mois M : deux mois ne peuvent donc jamais se chevaucher, et une date suffit à savoir quel mois elle fait commencer. Les transactions gardent leur **vraie date** ; seul leur regroupement par mois est calculé (`moisBudgetaire()` dans `periodes.js`). Modifier ou supprimer un début de mois recalcule donc tout instantanément, sans toucher aux transactions. L'export CSV contient une colonne « Mois » avec ce mois budgétaire.
 - **PEA.** On distingue ce qui a été **investi** (investi de départ + versements − retraits, qui touchent le budget) et ce que le PEA **vaut** (relevé manuellement, sans effet sur le budget). Entre deux relevés, la valeur est **estimée** : dernier relevé + versements − retraits faits depuis, pour qu'un versement ne fasse pas croire à une perte. Le total de l'onglet Épargne utilise cette valeur, et un retrait sur le PEA est limité à cette valeur.
 - **Frais de versement (PEA).** Ils sont calculés à la saisie (arrondis au centime) et **enregistrés sur la transaction** (`frais`) : changer le taux plus tard ne modifie pas l'historique. Le montant (`montant`) va sur le PEA ; le budget du mois perd `montant + frais` (`montantDebite()` dans `calculs.js`). L'export CSV indique le montant débité et une colonne « Dont frais ».
+- **Préférences d'affichage à part.** Le thème, le fond animé et le mode discret sont propres à l'appareil : ils sont rangés sous une autre clé que les données (`preferences.js`), ne partent pas dans la sauvegarde JSON et n'en reviennent pas. Le thème est posé sur `<html>` (`data-theme`) par `theme-initial.js`, chargé dans le `<head>` avant la feuille de style : l'app s'ouvre directement dans le bon thème. En mode Automatique, elle suit le téléphone même quand il change de thème pendant qu'elle est ouverte.
+- **Mode discret.** Tous les montants passent par `formaterMontant()` (`money.js`) : un seul interrupteur (`definirMasquage()`) suffit donc à tout masquer, graphiques et messages compris. Les formulaires utilisent `formaterMontantVisible()` : on y voit ce qu'on tape.
+- **Suppression par glissement.** Pas de confirmation, mais un bouton « Annuler » qui remet la transaction telle quelle, avec son identifiant d'origine (`restaurerTransaction()`). La suppression depuis la fiche de modification garde, elle, sa confirmation.
 - **Rien n'est stocké en double.** Les totaux, le solde cumulé et l'état des budgets sont **recalculés** à chaque affichage, donc ils ne peuvent jamais être faux.
 - **Transactions mensuelles.** À l'ouverture de l'app (et quand on y revient), `genererOccurrences()` crée les transactions manquantes jusqu'à aujourd'hui, puis met à jour `dernierMois`. Supprimer une occurrence ne la fait donc pas réapparaître.
 - **Suppression d'une catégorie.** Elle est impossible tant qu'une transaction ou une transaction mensuelle l'utilise. L'app affiche combien d'éléments la bloquent.
 
 ### Remplacer localStorage par une vraie base de données
 
-`store.js` est le seul fichier qui connaît `localStorage`, et toutes ses fonctions sont `async`.
+`store.js` est le seul fichier qui touche aux données de budget dans `localStorage` (les préférences d'affichage, elles, restent sur l'appareil), et toutes ses fonctions sont `async`.
 Pour passer à une API ou à IndexedDB, il suffit de réécrire l'intérieur de ces fonctions, par exemple :
 
 ```js
@@ -217,7 +225,9 @@ Le reste de l'application (`app.js`, les écrans…) n'a pas à changer.
 - Dialogues natifs `<dialog>` : le focus est géré, la touche Échap ferme, et le focus revient sur le bouton d'origine.
 - Les textes saisis (notes, noms de catégories) sont insérés avec `textContent`, jamais `innerHTML`. Une note contenant `<script>` s'affiche telle quelle, sans être exécutée (protection XSS).
 - L'export CSV neutralise les cellules commençant par `=`, `+`, `-` ou `@`, pour qu'un tableur ne les exécute pas comme des formules.
-- Le réglage « réduire les animations » du téléphone est respecté.
+- Le réglage « réduire les animations » du téléphone est respecté : fond immobile, pas d'animation d'arrivée ni de rebond. Le fond peut aussi être figé dans les Réglages.
+- Les gestes ont toujours un équivalent au toucher : une ligne de l'historique s'ouvre d'un simple toucher (avec « Supprimer » dans la fiche), et une feuille se ferme avec ✕ ou la touche Échap.
+- L'œil du mode discret et la roue des Réglages indiquent leur état aux lecteurs d'écran (`aria-pressed`).
 
 ---
 
@@ -225,3 +235,9 @@ Le reste de l'application (`app.js`, les écrans…) n'a pas à changer.
 
 Le service worker utilise la stratégie **« réseau d'abord, cache en secours »** : dès que le téléphone est en ligne, il récupère la dernière version des fichiers.
 Si tu ajoutes un **nouveau fichier JS ou CSS**, pense à l'ajouter à la liste `FICHIERS_APP` de `sw.js` et à incrémenter `VERSION`, par exemple `'v2'`.
+
+---
+
+## 7. Crédits
+
+- Police **DM Sans** (The DM Sans Project Authors), distribuée sous licence **SIL Open Font License 1.1** : voir `fonts/OFL.txt`. Le fichier est intégré à l'app (aucun appel à Google Fonts), ce qui permet un fonctionnement hors connexion et évite d'envoyer des requêtes à un service tiers.

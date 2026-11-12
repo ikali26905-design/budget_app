@@ -7,10 +7,11 @@
   <title>Mon Budget</title>
   <meta name="description" content="Suivi de budget personnel : dépenses, revenus et plafonds par catégorie.">
 
-  <!-- Couleur de la barre du navigateur, différente selon le thème du téléphone -->
-  <meta name="theme-color" content="#f6f6f3" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#121211" media="(prefers-color-scheme: dark)">
+  <!-- Couleur de la barre du navigateur : mise à jour par js/preferences.js selon le thème choisi -->
+  <meta name="theme-color" content="#f1f1ee">
   <meta name="color-scheme" content="light dark">
+  <!-- Pose le thème (clair/sombre) avant le premier affichage, pour éviter un flash -->
+  <script src="js/theme-initial.js"></script>
 
   <!-- PWA : manifeste + icônes (iOS utilise apple-touch-icon) -->
   <link rel="manifest" href="manifest.json">
@@ -30,19 +31,24 @@
     <!-- ===== En-tête : navigation entre les mois (cachée sur Réglages) ===== -->
     <header class="entete">
       <div class="nav-mois" id="nav-mois">
-        <button type="button" class="bouton-icone" id="mois-precedent" aria-label="Mois précédent">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-        </button>
         <div class="nav-mois__centre">
           <h1 class="nav-mois__titre" id="titre-mois" aria-live="polite">—</h1>
           <p class="nav-mois__periode" id="periode-mois" hidden></p>
           <button type="button" class="lien-discret" id="mois-actuel" hidden>Revenir à ce mois-ci</button>
         </div>
-        <button type="button" class="bouton-icone" id="mois-suivant" aria-label="Mois suivant">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
-        </button>
+        <div class="nav-mois__fleches">
+          <button type="button" class="bouton-icone" id="mois-precedent" aria-label="Mois précédent">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <button type="button" class="bouton-icone" id="mois-suivant" aria-label="Mois suivant">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        </div>
       </div>
       <h1 class="entete__titre" id="titre-reglages" hidden>Réglages</h1>
+      <button type="button" class="bouton-icone entete__reglages" id="bouton-reglages" aria-label="Réglages">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
     </header>
 
     <!-- ===== Les 4 écrans : un seul est visible à la fois ===== -->
@@ -54,11 +60,6 @@
       <section class="ecran" id="ecran-reglages" data-ecran="reglages" aria-label="Réglages" hidden></section>
     </main>
 
-    <!-- ===== Bouton flottant « + » ===== -->
-    <button type="button" class="fab" id="bouton-ajouter" aria-label="Ajouter une transaction">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-    </button>
-
     <!-- ===== Barre d'onglets en bas ===== -->
     <nav class="onglets" aria-label="Navigation principale">
       <button type="button" class="onglet" data-cible="accueil" aria-current="page">
@@ -69,6 +70,9 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>
         <span>Historique</span>
       </button>
+      <button type="button" class="fab" id="bouton-ajouter" aria-label="Ajouter une transaction">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
       <button type="button" class="onglet" data-cible="epargne">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2V5z"/><path d="M2 9v1c0 1.1.9 2 2 2h1"/><path d="M16 11h.01"/></svg>
         <span>Épargne</span>
@@ -76,10 +80,6 @@
             <button type="button" class="onglet" data-cible="budgets">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
         <span>Budgets</span>
-      </button>
-      <button type="button" class="onglet" data-cible="reglages">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
-        <span>Réglages</span>
       </button>
     </nav>
   </div>

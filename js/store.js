@@ -1,4 +1,5 @@
-// Couche d'accès aux données : c'est le SEUL fichier qui connaît localStorage.
+// Couche d'accès aux données de budget : c'est le SEUL fichier qui les lit ou les écrit dans localStorage.
+// (Les préférences d'affichage de l'appareil — thème, mode discret — sont à part, dans preferences.js.)
 //
 // Toutes les fonctions exportées sont « async » (elles renvoient une Promise), même si
 // localStorage est synchrone. Ainsi, le jour où on remplace ce fichier par des appels
@@ -197,6 +198,13 @@ export async function supprimerTransaction(id) {
   return modifier((d) => {
     trouver(d.transactions, id);
     d.transactions = d.transactions.filter((t) => t.id !== id);
+  });
+}
+
+// Remet une transaction qu'on vient de supprimer (bouton « Annuler »), avec son id d'origine
+export async function restaurerTransaction(transaction) {
+  return modifier((d) => {
+    if (!d.transactions.some((t) => t.id === transaction.id)) d.transactions.push({ ...transaction });
   });
 }
 
