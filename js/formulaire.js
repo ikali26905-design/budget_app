@@ -1,9 +1,9 @@
-// Feuille « Ajouter / Modifier une transaction ».
-// Objectif : une saisie en 3 gestes → « + », taper le montant, toucher une catégorie, valider.
+// Feuilles de saisie (transaction, plafond, objectif, catégorie, PEA…).
+// Transaction : une saisie en 3 gestes → « + », taper le montant au pavé, toucher une catégorie, valider.
 
 import { creer, ouvrirFeuille, fermerFeuille } from './ui.js';
 import { parserMontant, centimesVersSaisie, formaterMontantVisible as formaterMontant } from './money.js';
-import { aujourdhui, estDateValide, nomDuMois, dateLongue } from './dates.js';
+import { aujourdhui, estDateValide, nomDuMois, dateLongue, libelleJour } from './dates.js';
 import { moisCommencantLe, bornesDebut } from './periodes.js';
 import { fraisDuVersement, TAUX_FRAIS_DEFAUT } from './pea.js';
 import { typeDeCategorie, ID_COMPTE_EPARGNE } from './calculs.js';
@@ -41,23 +41,31 @@ function typeSaisi(formulaire) {
   return famille === 'epargne' ? formulaire.querySelector('input[name="sens"]:checked').value : famille;
 }
 
-// Crée un gros champ de montant en euros, qui ouvre le clavier numérique
-function creerChampMontant(valeurInitiale, autofocus, { id = 'champ-montant', libelle = 'Montant' } = {}) {
-  return creer('div', { class: 'champ champ-montant' },
-    creer('label', { class: 'champ__label', for: id }, libelle),
-    creer('input', {
-      class: 'champ__input',
-      id,
-      name: id,
-      // inputmode="decimal" : clavier numérique AVEC virgule (type="number" gère mal la virgule française)
-      inputmode: 'decimal',
-      autocomplete: 'off',
-      enterkeyhint: 'done',
-      placeholder: '0,00',
-      value: valeurInitiale,
-      autofocus,
-    }),
-    creer('span', { class: 'champ-montant__devise', 'aria-hidden': 'true' }, '€'),
+// Crée le champ de montant : un grand nombre centré, sans cadre, suivi de « € ».
+// Le champ s'élargit au fil de la saisie pour que « € » reste collé au nombre.
+// etiquetteVisible : false quand le contexte suffit (fenêtre de transaction), le libellé reste lu par les lecteurs d'écran
+function creerChampMontant(valeurInitiale, autofocus, { id = 'champ-montant', libelle = 'Montant', etiquetteVisible = true } = {}) {
+  const champ = creer('input', {
+    class: 'montant-saisie__input',
+    id,
+    name: id,
+    // inputmode="decimal" : clavier numérique AVEC virgule (type="number" gère mal la virgule française)
+    inputmode: 'decimal',
+    autocomplete: 'off',
+    enterkeyhint: 'done',
+    placeholder: '0,00',
+    value: valeurInitiale,
+    autofocus,
+  });
+  // Largeur ≈ nombre de caractères × largeur d'un chiffre (chiffres à chasse fixe, voir le CSS)
+  const ajuster = () => { champ.style.width = `${Math.max(champ.value.length, 4) * 0.62 + 0.2}em`; };
+  champ.addEventListener('input', ajuster);
+  ajuster();
+  return creer('div', { class: 'champ-montant' },
+    creer('label', { class: etiquetteVisible ? 'champ__label champ-montant__label' : 'visuellement-cache', for: id }, libelle),
+    creer('div', { class: 'montant-saisie' },
+      champ,
+      creer('span', { class: 'montant-saisie__devise', 'aria-hidden': 'true' }, '€')),
   );
 }
 
@@ -66,42 +74,80 @@ function categorieParDefaut(famille) {
   return famille === 'epargne' ? ID_COMPTE_EPARGNE : null;
 }
 
-// Crée la grille de pastilles de catégories pour une famille (« depense », « revenu », « epargne »)
+// Crée la rangée de pastilles de catégories pour une famille (« depense », « revenu », « epargne ») :
+// emoji + nom, sur une ligne qui défile sur le côté
 function creerPastilles(categories, famille, categorieChoisie) {
   const pastilles = categories
     .filter((c) => c.type === famille)
-    .map((c) => creer('div', { class: 'pastille' },
+    .map((c) => creer('div', { class: 'pastille', style: `--couleur: var(--serie-${c.couleur ?? 8})` },
       creer('input', { type: 'radio', name: 'categorie', id: `cat-${c.id}`, value: c.id, checked: c.id === categorieChoisie }),
       creer('label', { for: `cat-${c.id}` },
         creer('span', { class: 'pastille__emoji', 'aria-hidden': 'true' }, c.emoji),
         c.nom),
     ));
   return creer('fieldset', { class: 'pastilles', id: 'pastilles' },
-    creer('legend', { class: 'champ__label' }, famille === 'epargne' ? 'Compte d’épargne' : 'Catégorie'),
+    creer('legend', { class: 'visuellement-cache' }, famille === 'epargne' ? 'Compte d’épargne' : 'Catégorie'),
     pastilles);
 }
 
-// Crée les champs date et note sur une même rangée
-function creerDateEtNote(date, note) {
-  return creer('div', { class: 'rangee' },
-    creer('div', { class: 'champ' },
-      creer('label', { class: 'champ__label', for: 'champ-date' }, 'Date'),
-      creer('input', { class: 'champ__input', type: 'date', id: 'champ-date', name: 'date', value: date, required: true })),
-    creer('div', { class: 'champ' },
-      creer('label', { class: 'champ__label', for: 'champ-note' }, 'Note (facultatif)'),
-      creer('input', { class: 'champ__input', id: 'champ-note', name: 'note', value: note, maxlength: 80, autocomplete: 'off', placeholder: 'Ex. : pizza du vendredi' })),
-  );
+// Date, note et « Chaque mois » : trois petites pastilles sur une ligne
+function creerOptions(date, note, cochee) {
+  // Date : le vrai champ date est invisible, posé sur la pastille ; le toucher ouvre le calendrier du téléphone
+  const texteDate = creer('span', {}, libelleJour(date));
+  const champDate = creer('input', { class: 'puce__date', type: 'date', id: 'champ-date', name: 'date', value: date, required: true, 'aria-label': 'Date' });
+  champDate.addEventListener('change', () => {
+    if (estDateValide(champDate.value)) texteDate.textContent = libelleJour(champDate.value);
+  });
+  champDate.addEventListener('click', () => champDate.showPicker?.()); // ordinateur : ouvre aussi le calendrier
+  // Note : le champ n'apparaît que si on en a besoin (ou s'il y a déjà une note)
+  const champNote = creer('input', {
+    class: 'options__note', id: 'champ-note', name: 'note', value: note, maxlength: 80,
+    autocomplete: 'off', placeholder: 'Ajouter une note…', 'aria-label': 'Note', hidden: !note,
+  });
+  const boutonNote = creer('button', {
+    type: 'button',
+    class: 'puce',
+    hidden: Boolean(note),
+    onclick: () => {
+      boutonNote.hidden = true;
+      champNote.hidden = false;
+      champNote.focus();
+    },
+  }, 'Note');
+  return creer('div', { class: 'options' },
+    creer('div', { class: 'options__puces' },
+      creer('label', { class: 'puce' }, texteDate, champDate),
+      boutonNote,
+      creer('label', { class: 'puce puce--case', title: 'Ajoutée automatiquement chaque mois, à la même date' },
+        creer('input', { type: 'checkbox', name: 'chaqueMois', checked: cochee }),
+        'Chaque mois')),
+    champNote);
 }
 
-// Crée la case « Chaque mois » avec son explication
-function creerCaseRecurrente(cochee) {
-  return creer('label', { class: 'case' },
-    creer('input', { type: 'checkbox', name: 'chaqueMois', checked: cochee }),
-    creer('span', {},
-      creer('strong', {}, 'Chaque mois'),
-      creer('br'),
-      creer('span', { class: 'aide', id: 'aide-recurrente' }, 'Ajoutée automatiquement chaque mois, à la même date.')),
-  );
+// Pavé numérique intégré : remplace le clavier du téléphone pour le montant, qui ne cache donc plus rien
+function creerPave(champ) {
+  const touches = ['1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '0', '⌫'];
+  const appuyer = (touche) => {
+    let valeur = champ.value;
+    if (touche === '⌫') valeur = valeur.slice(0, -1);
+    else if (touche === ',') {
+      if (!valeur.includes(',')) valeur = `${valeur || '0'},`;
+    } else if (/,\d\d$/.test(valeur) || (!valeur.includes(',') && valeur.length >= 7)) {
+      return; // 2 décimales et 7 chiffres avant la virgule au maximum
+    } else {
+      valeur = valeur === '0' ? touche : valeur + touche;
+    }
+    champ.value = valeur;
+    // Les écouteurs « input » (largeur du champ, frais, message d'erreur) se déclenchent comme au clavier
+    champ.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  return creer('div', { class: 'pave', role: 'group', 'aria-label': 'Pavé numérique' },
+    touches.map((t) => creer('button', {
+      type: 'button',
+      class: 'pave__touche',
+      'aria-label': t === '⌫' ? 'Effacer' : t,
+      onclick: () => appuyer(t),
+    }, t)));
 }
 
 // Lit et valide le formulaire ; renvoie { valeurs } ou { erreur, champ }
@@ -161,15 +207,22 @@ export function ouvrirFormulaireTransaction({ categories, pea = null, transactio
     { nom: 'sens', options: SENS_EPARGNE, libelle: 'Sens du mouvement d’épargne' });
   selecteurSens.classList.add('segment--secondaire');
   selecteurSens.hidden = famille !== 'epargne';
-  const formulaire = creer('form', { class: 'formulaire', novalidate: true },
-    creerSelecteurType(famille),
-    selecteurSens,
-    creerChampMontant(initial.montant ? centimesVersSaisie(initial.montant) : '', !modification),
-    creerPastilles(categories, famille, initial.categorieId ?? categorieParDefaut(famille)),
+  // Le montant se tape au pavé intégré : champ en lecture seule, sans clavier du téléphone
+  const champMontant = creerChampMontant(initial.montant ? centimesVersSaisie(initial.montant) : '', false, { etiquetteVisible: false });
+  const saisie = champMontant.querySelector('input');
+  saisie.readOnly = true;
+  saisie.setAttribute('inputmode', 'none');
+  const selecteurType = creerSelecteurType(famille);
+  selecteurType.classList.add('segment--onglets');
+  const formulaire = creer('form', { class: 'formulaire formulaire--transaction', novalidate: true },
+    selecteurType,
+    champMontant,
     creer('p', { class: 'info-frais', 'aria-live': 'polite', hidden: true }),
-    creerDateEtNote(initial.date, initial.note),
-    creerCaseRecurrente(estRecurrente),
+    selecteurSens,
+    creerPastilles(categories, famille, initial.categorieId ?? categorieParDefaut(famille)),
+    creerOptions(initial.date, initial.note, estRecurrente),
     creer('p', { class: 'erreur', role: 'alert', hidden: true }),
+    creerPave(saisie),
     creer('div', { class: 'feuille__actions' },
       boutonValider,
       modification && creer('button', { type: 'button', class: 'bouton bouton--contour-danger bouton--plein', 'data-action': 'supprimer' }, 'Supprimer'),
@@ -200,6 +253,7 @@ export function ouvrirFormulaireTransaction({ categories, pea = null, transactio
       selecteurSens.hidden = value !== 'epargne';
     }
     if (name === 'type' || name === 'sens') boutonValider.textContent = libelleBouton(modification, typeSaisi(formulaire));
+    if (name === 'categorie') centrerCategorie(formulaire, true);
     majFrais(); // après le remplacement éventuel des pastilles
   });
 
@@ -225,7 +279,21 @@ export function ouvrirFormulaireTransaction({ categories, pea = null, transactio
 
   formulaire.querySelector('[data-action="supprimer"]')?.addEventListener('click', () => surSupprimer());
 
-  ouvrirFeuille(modification ? 'Modifier la transaction' : 'Nouvelle transaction', formulaire);
+  // Le titre reste lu par les lecteurs d'écran ; à l'écran, les onglets Dépense / Revenu / Épargne en tiennent lieu
+  ouvrirFeuille(modification ? 'Modifier la transaction' : 'Nouvelle transaction', formulaire, { classe: 'feuille--transaction' });
+  centrerCategorie(formulaire, false);
+}
+
+// Fait défiler la rangée de catégories (et elle seule) pour montrer celle qui est choisie
+function centrerCategorie(formulaire, doux) {
+  const pastille = formulaire.querySelector('input[name="categorie"]:checked')?.parentElement;
+  if (!pastille) return;
+  const rangee = pastille.parentElement;
+  // La rangée est positionnée (CSS) : offsetLeft d'une pastille se mesure donc depuis son bord gauche
+  rangee.scrollTo({
+    left: pastille.offsetLeft - (rangee.clientWidth - pastille.offsetWidth) / 2,
+    behavior: doux ? 'smooth' : 'auto',
+  });
 }
 
 /**

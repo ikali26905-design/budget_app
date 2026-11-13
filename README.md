@@ -5,7 +5,7 @@ En quelques secondes, tu sais combien il y a sur ton compte et où va ton argent
 
 - **Accueil** : le **solde du compte** en grand (solde cumulé jusqu'à la fin du mois affiché), le solde du mois en pastille juste dessous (revenus − dépenses − épargne), les revenus, dépenses et épargne du mois, le budget global et la répartition des dépenses par catégorie. À l'arrivée sur l'écran, les cartes apparaissent l'une après l'autre, le solde défile jusqu'à sa valeur et les barres se remplissent.
 - **Mode discret** : l'œil à côté du solde masque tous les montants de l'app (« ••• € »), pratique dans les transports. Le choix est mémorisé.
-- **Ajout rapide** : « + » → montant (clavier numérique) → catégorie → valider. La date du jour est déjà remplie.
+- **Ajout rapide** : « + » → montant tapé sur le **pavé numérique intégré** (le clavier du téléphone ne s'ouvre pas, rien n'est caché) → catégorie (pastilles qui défilent sur le côté) → valider. Date, note et « Chaque mois » sont trois petites pastilles : « Aujourd'hui » ouvre le calendrier du téléphone, « Note » ouvre le champ seulement si besoin.
 - **Historique** : transactions du mois groupées par jour, filtre par catégorie. Touche une ligne pour la modifier ; fais-la **glisser vers la gauche** pour la supprimer (bouton « Annuler » pendant 5 s) ou **vers la droite** pour la modifier.
 - **Épargne** : deux grandes cartes séparées, car ce ne sont pas les mêmes placements. Le **compte « Épargne » unique** : son solde, le mouvement du mois, un objectif facultatif avec sa barre de progression, et les boutons « Verser » / « Retirer ». « Modifier » permet d'indiquer son **solde de départ** (ce qu'il contenait avant d'utiliser l'app) et l'objectif.
 - **PEA** : sa propre carte dans l'onglet Épargne. Les versements fonctionnent comme pour le compte épargne ; chaque mois, tu « fais le point » en relevant la **valeur réelle** du PEA. La carte affiche la valeur, la plus ou moins-value (en € et en %), le montant investi, les frais payés et la date des 5 ans (avantage fiscal) ; en dessous, un graphique d'évolution (valeur vs montant investi) et l'historique des relevés. Les **frais de versement** (1 % par défaut, réglables) sont pris en compte : pour 100 € versés, le PEA reçoit 100 € et 101 € sont déduits du budget.
@@ -14,7 +14,7 @@ En quelques secondes, tu sais combien il y a sur ton compte et où va ton argent
 - **Début des mois** : un mois peut commencer le jour où ta paye arrive (ex. octobre commence le 28 septembre). Quand tu saisis un revenu en fin de mois, l'app te propose de faire commencer le mois suivant ce jour-là. Les débuts se modifient ou se suppriment dans les Réglages.
 - **Réglages** (roue en haut à droite) : thème Automatique / Clair / Sombre, fond animé ou fixe, catégories personnalisées, début des mois, export JSON/CSV, import JSON.
 - **Interface** : police DM Sans, barre d'onglets flottante avec le « + » au centre, fond « en relief » (halos colorés en clair, gris sur fond noir en sombre) qui dérive lentement, fenêtres de saisie qui montent avec un léger rebond et se ferment en les glissant vers le bas, coche animée après un ajout.
-- **PWA** : l'app s'installe sur l'écran d'accueil et fonctionne hors connexion (police comprise).
+- **PWA** : l'app s'installe sur l'écran d'accueil et fonctionne hors connexion (police comprise). Comme une application, la page ne se zoome pas.
 
 Technologies : HTML, CSS et JavaScript « vanilla » (modules ES), sans framework, sans dépendance et sans étape de build.
 Les graphiques sont dessinés en SVG fait maison.
@@ -219,7 +219,8 @@ Le reste de l'application (`app.js`, les écrans…) n'a pas à changer.
 
 ## 5. Accessibilité et confort d'utilisation
 
-- Zones tactiles d'au moins 44 px et texte de 16 px dans les champs : Safari iOS ne zoome pas automatiquement.
+- Zones tactiles d'au moins 44 px (les petites pastilles de la saisie ont une zone de toucher agrandie autour d'elles) et texte de 16 px dans les champs : Safari iOS ne zoome pas automatiquement.
+- Le zoom est désactivé pour que l'app se comporte comme une application installée (`user-scalable=no`, `touch-action: manipulation`, et blocage du geste à deux doigts que Safari iOS laisse passer). Le réglage « taille du texte » du téléphone continue de s'appliquer.
 - Contrastes des textes ≥ 4,5:1 dans les deux thèmes.
 - La couleur n'est jamais la seule information : les jauges affichent aussi un symbole (✓ ! ✕) et un texte (« Reste 5 € », « Dépassé de 4 € »).
 - Dialogues natifs `<dialog>` : le focus est géré, la touche Échap ferme, et le focus revient sur le bouton d'origine.

@@ -781,8 +781,16 @@ function surRetourDansApp() {
   });
 }
 
+// Pas de zoom à deux doigts : Safari iOS ignore « user-scalable=no » (accessibilité), il faut bloquer le geste lui-même
+function bloquerZoom() {
+  for (const geste of ['gesturestart', 'gesturechange']) {
+    document.addEventListener(geste, (evenement) => evenement.preventDefault(), { passive: false });
+  }
+}
+
 // Lance l'application
 async function demarrer() {
+  bloquerZoom();
   appliquerPreferences(etat.preferences);
   definirMasquage(etat.preferences.discret);
   // En mode « Automatique », le thème suit le téléphone en direct

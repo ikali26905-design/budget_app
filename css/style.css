@@ -95,6 +95,8 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* manipulation : pas de zoom au double appui (et plus de délai de 300 ms sur les touchers) */
+  touch-action: manipulation;
   /* Évite le flash gris au toucher sur mobile */
   -webkit-tap-highlight-color: transparent;
 }
@@ -420,62 +422,10 @@ svg {
   border-color: var(--negatif);
 }
 
-/* Le champ montant est l'élément principal du formulaire : très lisible */
-.champ-montant {
-  position: relative;
-}
-
-.champ-montant .champ__input {
-  font-size: 2rem;
-  font-weight: 700;
-  min-height: 64px;
-  padding-right: 48px;
-  font-variant-numeric: tabular-nums;
-}
-
-.champ-montant__devise {
-  position: absolute;
-  right: 16px;
-  bottom: 14px;
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--texte-3);
-  pointer-events: none;
-}
-
 .erreur {
   color: var(--negatif);
   font-size: 0.875rem;
   font-weight: 600;
-}
-
-/* Case à cocher grand format */
-.case {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: var(--hauteur-tactile);
-  margin-bottom: 16px;
-}
-
-.case input {
-  width: 24px;
-  height: 24px;
-  accent-color: var(--accent);
-  flex-shrink: 0;
-}
-
-/* Rangée « date + note » sur deux colonnes quand il y a la place */
-.rangee {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 0 12px;
-}
-
-@media (min-width: 420px) {
-  .rangee {
-    grid-template-columns: 1fr 1.4fr;
-  }
 }
 
 /* Sélecteur à deux options (Dépense / Revenu) */
@@ -525,24 +475,26 @@ svg {
 }
 
 /* ---------- 9. Pastilles de catégories (boutons radio stylés) ---------- */
+/* Une seule ligne qui défile sur le côté (le pavé numérique a besoin de la place en dessous) */
 .pastilles {
-  display: grid;
-  /* 3 colonnes sur téléphone : « Abonnements » tient en entier sans réduire la police.
-     minmax(0, 1fr) garantit des colonnes égales même avec un mot long. */
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  position: relative; /* repère pour centrer la catégorie choisie (formulaire.js) */
+  min-width: 0; /* un <fieldset> refuse par défaut d'être plus étroit que son contenu : sans ça, pas de défilement */
+  display: flex;
   gap: 8px;
-  margin: 0 0 16px;
-  padding: 0;
+  margin: 0 -20px 14px;
+  padding: 2px 20px;
   border: 0;
+  overflow-x: auto;
+  scrollbar-width: none; /* Firefox */
 }
 
-.pastilles legend {
-  padding: 0;
-  margin-bottom: 6px;
+.pastilles::-webkit-scrollbar {
+  display: none; /* Safari, Chrome */
 }
 
 .pastille {
   position: relative;
+  flex-shrink: 0;
 }
 
 .pastille input {
@@ -551,46 +503,35 @@ svg {
   pointer-events: none;
 }
 
+/* Emoji + nom dans une pilule teintée de la couleur de la catégorie */
 .pastille label {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 2px;
-  min-height: 68px;
-  padding: 6px 0;
-  letter-spacing: -0.01em;
-  border-radius: var(--rayon-petit);
-  background: var(--surface-2);
-  border: 2px solid transparent;
-  font-size: 0.75rem;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px 0 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--couleur) 14%, var(--surface));
+  font-size: 0.9375rem;
   font-weight: 600;
-  text-align: center;
-  line-height: 1.15;
+  white-space: nowrap;
   cursor: pointer;
-  hyphens: auto;
-  overflow-wrap: anywhere;
-}
-
-@media (min-width: 480px) {
-  .pastilles {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
 }
 
 .pastille__emoji {
-  font-size: 1.5rem;
+  font-size: 1.1rem;
   line-height: 1;
 }
 
+/* Catégorie choisie : pilule pleine, couleur du texte (noir en clair, blanc en sombre) */
 .pastille input:checked + label {
-  border-color: var(--accent);
-  background: var(--accent-doux);
+  background: var(--texte);
+  color: var(--fond);
 }
 
 .pastille input:focus-visible + label {
   outline: 3px solid var(--accent);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 
 /* ---------- 10. Feuille modale (bottom sheet) ---------- */
@@ -1502,7 +1443,6 @@ body::after {
 
 /* ----- 22.6 Boutons et champs ----- */
 .bouton { border-radius: 16px; min-height: 52px; font-size: 1.0625rem; }
-.pastille label { border-radius: 16px; }
 .segment { border-radius: 16px; }
 .segment label { border-radius: 12px; padding: 0 4px; font-size: 0.9375rem; letter-spacing: -0.02em; }
 .champ__input { border-radius: var(--rayon-petit); }
@@ -1630,7 +1570,19 @@ body::after {
   to { transform: translateY(0); }
 }
 /* Zone qu'on attrape pour faire glisser (poignée + titre) */
-.feuille__poignee { width: 44px; height: 5px; margin-top: 10px; }
+/* La poignée est une bande de toute la largeur (facile à attraper), la petite barre est dessinée dedans */
+.feuille__poignee { position: relative; width: 100%; height: 22px; margin: 0; background: none; }
+.feuille__poignee::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  width: 44px;
+  height: 5px;
+  margin-left: -22px;
+  border-radius: 3px;
+  background: var(--surface-2);
+}
 .feuille__poignee,
 .feuille__entete { touch-action: none; cursor: grab; }
 .feuille--glisse { transition: none; }
@@ -1643,8 +1595,9 @@ body::after {
   align-items: center;
   gap: 10px;
 }
-.toast__coche { width: 22px; height: 22px; flex-shrink: 0; }
-.toast__coche circle { fill: var(--positif); }
+.toast__coche { width: 22px; height: 22px; flex-shrink: 0; overflow: visible; }
+/* stroke: none — sinon le cercle hérite du contour des icônes (règle « svg » de la base) : anneau parasite */
+.toast__coche circle { fill: #1f9d3a; stroke: none; }
 .toast__coche path {
   fill: none;
   stroke: #ffffff;
@@ -1655,7 +1608,7 @@ body::after {
   stroke-dasharray: 16;
   stroke-dashoffset: 16;
 }
-.toast--visible .toast__coche circle { animation: coche-rond 0.3s cubic-bezier(0.3, 1.5, 0.5, 1) both; transform-origin: center; }
+.toast--visible .toast__coche circle { transform-box: fill-box; transform-origin: center; animation: coche-rond 0.32s cubic-bezier(0.3, 1.3, 0.5, 1) both; }
 .toast--visible .toast__coche path { animation: coche-trait 0.35s 0.18s ease-out forwards; }
 @keyframes coche-rond { from { transform: scale(0.4); } to { transform: scale(1); } }
 @keyframes coche-trait { to { stroke-dashoffset: 0; } }
@@ -1735,7 +1688,137 @@ body::after {
 .interrupteur input:checked::after { transform: translateX(20px); background: var(--accent-texte); }
 .interrupteur input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
-/* ----- 22.13 Animations d'arrivée sur l'accueil ----- */
+/* ----- 22.13 Fenêtres de saisie : grand montant centré, sans cadre ----- */
+.champ-montant { margin: 14px 0 12px; text-align: center; }
+.champ-montant__label { display: block; font-size: 0.8125rem; }
+.montant-saisie {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 3rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+.montant-saisie__input {
+  min-width: 0;
+  max-width: 80%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--texte);
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: right;
+  font-variant-numeric: tabular-nums; /* chiffres de même largeur : la largeur du champ se calcule simplement */
+  caret-color: var(--texte);
+}
+.montant-saisie__input::placeholder { color: var(--texte-3); opacity: 0.45; }
+.montant-saisie__input:focus { outline: none; }
+.montant-saisie__input[aria-invalid="true"] { color: var(--negatif); }
+.montant-saisie__devise { color: var(--texte-3); font-size: 0.6em; font-weight: 700; }
+.info-frais { margin: -4px auto 12px; width: max-content; max-width: 100%; border-radius: 999px; padding: 6px 12px; font-size: 0.8125rem; }
+.feuille .bouton { min-height: 50px; font-size: 1rem; }
+.feuille__actions { border-top: 0; padding-top: 8px; }
+
+/* ----- 22.14 Fenêtre « transaction » : onglets de type, pavé numérique, options en pastilles ----- */
+/* Pas de titre visible : les onglets Dépense / Revenu / Épargne en tiennent lieu ; ✕ en haut à droite */
+.feuille--transaction .feuille__titre { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.feuille--transaction .feuille__entete { position: absolute; top: 18px; right: 12px; z-index: 1; padding: 0; }
+.feuille--transaction .feuille__entete .bouton-icone { width: 44px; height: 44px; background: var(--surface-2); }
+.feuille--transaction .feuille__entete .bouton-icone svg { width: 18px; height: 18px; }
+.feuille--transaction .feuille__corps { padding-top: 12px; }
+.feuille--transaction .bouton[type="submit"] { border-radius: 999px; }
+
+/* Type : simples mots, le choisi en couleur pleine, les autres estompés */
+.segment--onglets {
+  justify-content: start;
+  grid-auto-columns: auto;
+  gap: 4px;
+  margin: 0 52px 4px 0;
+  padding: 0;
+  background: none;
+}
+.segment--onglets label {
+  min-height: 44px;
+  padding: 0 10px 0 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--texte-3);
+  opacity: 0.55;
+}
+.segment--onglets input:checked + label { color: var(--texte); opacity: 1; background: none; box-shadow: none; }
+.formulaire--transaction .champ-montant { margin: 6px 0 10px; }
+.formulaire--transaction .montant-saisie { font-size: 3.2rem; }
+.formulaire--transaction .montant-saisie__input { caret-color: transparent; } /* saisie au pavé : pas de curseur clignotant */
+
+/* Mettre de côté / Retirer : petit segment centré sous le montant */
+.formulaire--transaction .segment--secondaire {
+  max-width: 280px;
+  margin: 0 auto 10px;
+  padding: 3px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+.formulaire--transaction .segment--secondaire label { min-height: 36px; font-size: 0.875rem; border-radius: 11px; }
+.formulaire--transaction .segment--secondaire input:checked + label { background: var(--surface); color: var(--texte); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+:root[data-theme="dark"] .formulaire--transaction .segment--secondaire input:checked + label { background: #3a3a3e; }
+
+/* Options : Aujourd'hui · Note · Chaque mois */
+.options { margin-bottom: 6px; }
+.options__puces { display: flex; gap: 6px; }
+.puce {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--bordure);
+  border-radius: 999px;
+  background: none;
+  color: var(--texte-2);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+/* Zone de toucher agrandie à 44 px de haut, sans changer l'apparence de la pastille */
+.puce::after { content: ''; position: absolute; inset: -4px 0; }
+/* Le vrai champ date est invisible et recouvre la pastille : le toucher ouvre le calendrier du téléphone */
+.puce__date { position: absolute; inset: -4px 0; z-index: 1; width: 100%; height: calc(100% + 8px); padding: 0; border: 0; opacity: 0; cursor: pointer; }
+.puce--case input { position: absolute; opacity: 0; pointer-events: none; }
+.puce--case:has(input:checked) { border-color: transparent; background: var(--texte); color: var(--fond); }
+.puce:has(input:focus-visible), .puce:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.options__note {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 10px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--surface-2);
+  color: var(--texte);
+  font-size: 16px; /* 16 px minimum : sinon Safari iOS zoome sur le champ */
+}
+.options__note:focus { outline: 2px solid var(--texte); }
+.formulaire--transaction .erreur { margin: 6px 0 0; text-align: center; }
+
+/* Pavé numérique */
+.pave { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin: 4px 0; }
+.pave__touche {
+  min-height: 48px;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  color: var(--texte);
+  font-size: 1.375rem;
+  font-weight: 600;
+}
+.pave__touche:active { background: var(--surface-2); }
+
+/* ----- 22.15 Animations d'arrivée sur l'accueil ----- */
 /* La classe « entree » est ajoutée par app.js quand on ouvre l'app, change d'onglet ou de mois */
 .entree > .carte { animation: carte-monte 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .entree > .carte:nth-child(2) { animation-delay: 0.08s; }

@@ -82,7 +82,7 @@ function creerCoche() {
   const rond = document.createElementNS(ns, 'circle');
   rond.setAttribute('cx', '12');
   rond.setAttribute('cy', '12');
-  rond.setAttribute('r', '12');
+  rond.setAttribute('r', '11'); // un peu plus petit que la zone de dessin : le rebond n'est pas rogné
   const trait = document.createElementNS(ns, 'path');
   trait.setAttribute('d', 'M7 12.5l3.2 3.2L17 9');
   svg.append(rond, trait);
@@ -119,9 +119,11 @@ export function afficherToast(message, { coche = false, action = null } = {}) {
 
 const feuille = document.getElementById('feuille');
 
-// Ouvre la feuille avec un titre et un contenu ; renvoie le corps de la feuille
-export function ouvrirFeuille(titre, contenu) {
+// Ouvre la feuille avec un titre et un contenu ; renvoie le corps de la feuille.
+// classe (facultatif) : variante d'affichage de la feuille, retirée à la fermeture
+export function ouvrirFeuille(titre, contenu, { classe = null } = {}) {
   document.getElementById('feuille-titre').textContent = titre;
+  feuille.className = classe ? `feuille ${classe}` : 'feuille';
   const corps = document.getElementById('feuille-corps');
   remplir(corps, contenu);
   corps.scrollTop = 0;
